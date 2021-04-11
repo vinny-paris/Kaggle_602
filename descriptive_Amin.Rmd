@@ -1,0 +1,185 @@
+---
+title: "NY real estate"
+author: "Amin Shirazi"
+date: "4/8/2021"
+output: 
+  html_document:
+    mathjax: default
+    number_sections: true
+    toc: yes
+    toc_depth: 5
+    df_print: paged
+    highlight: tango
+    code_folding: hide
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(caret)
+```
+
+```{css, echo=FALSE}
+pre {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+pre[class] {
+  max-height: 100px;
+}
+```
+
+```{r}
+train<- read.csv('./data/Queens Training Set.csv') %>% select(- X)
+
+names(train)
+dim(train)
+```
+
+- **BOROUGH** is all equal to 4
+
+- Here is the list of **neighborhood**. Probably we can use the online data to sort the 
+neighborhood w.r.t the price. It makes sense to have higher price for houses in some 
+neighborhood. 
+
+
+```{r}
+train %>% mutate(NEIGHBORHOOD = as.factor(NEIGHBORHOOD),
+                 SALE.PRICE = log(SALE.PRICE+1)) %>% 
+  ggplot(aes(reorder(NEIGHBORHOOD, SALE.PRICE, FUN = median), log(SALE.PRICE+1))) + 
+  geom_boxplot() + coord_flip() + xlab('Neighborhood') 
+```
+
+
+
+- **Building class category**
+```{r}
+train %>% ggplot(aes(as.factor(BUILDING.CLASS.CATEGORY), log(SALE.PRICE+1))) + geom_boxplot() + 
+  coord_flip()
+```
+
+
+- **Tax class at the present**
+```{r}
+train %>% mutate(TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT),
+                 SALE.PRICE = log(SALE.PRICE+1)) %>% 
+  ggplot(aes(reorder(TAX.CLASS.AT.PRESENT, SALE.PRICE, FUN = median), log(SALE.PRICE+1))) + 
+  geom_boxplot() + coord_flip() + xlab('Tax class at present') 
+```
+
+
+- for the **Block**, there are `r train %>% mutate(BLOCK = as.factor(BLOCK)) %>% select(BLOCK) %>% unique() %>% nrow()`
+different categories in the data. Idk how to get them to work. We might be able to cluster 
+the price w.r.t the blocks. 
+
+
+- Similarly for **LOT**  `r train %>% mutate(BLOCK = as.factor(LOT)) %>% select(LOT) %>% unique() %>% nrow()` 
+unique categories
+
+- **Easement** could be removed from the data. It is all NA
+
+- **BUILDING.CLASS.AT.PRESENT**
+```{r}
+train %>% mutate(BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                 SALE.PRICE = log(SALE.PRICE+1)) %>% 
+  ggplot(aes(reorder(BUILDING.CLASS.AT.PRESENT, SALE.PRICE, FUN = median), log(SALE.PRICE+1))) + 
+  geom_boxplot() + coord_flip() + xlab('BUILDING.CLASS.AT.PRESENT') 
+```
+
+
+- For **Address**, currently no use of this variable, but we may use that for clustering or for 
+making new features.
+
+- **Apartment number** should also be removed from the data. They are almost all NA's
+
+- **Zip code** again can be used for clustering the data or for creating new features. 
+
+- **RESIDENTIAL.UNITS**: Since the aim is to predict house price, maybe we can filter out the 
+observations with zero residential units. Maybe! What does it mean to have no residential units?
+Are we going to predict price for houses only or for buildings and houses?
+```{r}
+train$RESIDENTIAL.UNITS %>% table()
+```
+The box plot:
+```{r}
+train %>% mutate(RESIDENTIAL.UNITS = as.factor(RESIDENTIAL.UNITS),
+                 SALE.PRICE = log(SALE.PRICE+1)) %>% 
+  ggplot(aes(reorder(RESIDENTIAL.UNITS, SALE.PRICE, FUN = median), log(SALE.PRICE+1))) + 
+  geom_boxplot() + coord_flip() + xlab('RESIDENTIAL.UNITS') 
+```
+
+
+- **Commercial units**: there are `r sum(train$RESIDENTIAL.UNITS==0 & train$COMMERCIAL.UNITS>0)` observations with 
+zero residential units and at least one commercial units. Interestingly, there are 
+`r sum(train$RESIDENTIAL.UNITS == 0 & train$COMMERCIAL.UNITS==0)` observations with neither any residential 
+units nor commercial. Needs to dig in to understand what they are
+
+- If the aim is to predict price for any type of property (commercial or residential or both), we may 
+consider **Total Units**. There are two cases where the total units is not equal to the sum of 
+commercial and residential units. Those are:
+
+```{r}
+d.tot.unit <- train %>% mutate(tot = COMMERCIAL.UNITS + RESIDENTIAL.UNITS, 
+                 tot.true = ifelse(tot == TOTAL.UNITS, 1, 0))
+d.tot.unit %>% filter(tot.true ==0)
+
+
+```
+
+
+- **LAND.SQUARE.FEET**: Some unusual large land square feet value. There is definitely something wrong with them. 
+We should think more and probably remove them from the data set. We can also look at the test set to see if 
+there exists any unusual entry like this.
+```{r}
+train %>% arrange(desc(LAND.SQUARE.FEET)) %>% select(NEIGHBORHOOD, BUILDING.CLASS.CATEGORY, 
+                                                     TAX.CLASS.AT.PRESENT, BLOCK, ADDRESS, 
+                                                     ZIP.CODE, TOTAL.UNITS, LAND.SQUARE.FEET, 
+                                                     GROSS.SQUARE.FEET, SALE.PRICE) %>% head(15)
+```
+
+There are also 4883 observations with zero land square feet. 
+```{r}
+train %>% filter(LAND.SQUARE.FEET==0) %>% head()
+```
+
+- Hist on the log of land square feet
+
+```{r}
+train %>% filter(LAND.SQUARE.FEET>0) %>%  ggplot(aes(log(LAND.SQUARE.FEET))) + geom_histogram()
+```
+
+- Similarly, for **GROSS.SQUARE.FEET** we have 5132 zero values.
+```{r}
+# train %>% filter(GROSS.SQUARE.FEET==0)
+
+train %>% filter(GROSS.SQUARE.FEET>0) %>%  ggplot(aes(log(GROSS.SQUARE.FEET))) + geom_histogram()
+
+```
+
+
+- My intuition is that we should use the log of Land and gross square feet on the first place, and 
+clean the data on the second. The data is really noisy w.r.t different features, and before any analysis, 
+we should clean the data. 
+
+- Not sure how we can use the info about **Year Built** and **Sale date**. 
+- Also, about **TAX.CLASS.AT.TIME.OF.SALE** and **BUILDING.CLASS.AT.TIME.OF.SALE**. Actually, have 
+no idea if they are important in predicting house price. 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
