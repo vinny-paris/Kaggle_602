@@ -171,10 +171,29 @@ no idea if they are important in predicting house price.
 
 
 
+## What to do this week of 04/12
+- Remove BOrough
+- Neighborhood to be a factor
+- Class category to be a factor -Amin 
+  - Compare present vs. time of sale - Amin 
+- Tax class-> to be a factor + compare present vs. time of sale -Amin
+- Block -> remove for now
+- LOT-> remove for now
+- LOT and BLOCK should be behaved the same
+- EAsement to be removed
+- Address and building number -> remove
+- Residential and commercial units and total units -> take a closer look and try to possibly update or remove the unusual values- Vinny
+- Land square feet-> use the log transformation and update the unusual values - Subrata
+- Gross square feet -> use the log transformation and update the unusual values- Subrata
+- Year built -> keep them for now - Vinny
+- Sale date -> keep them for now
 
-
-
-
+- Fit a MLR without any change on the data, Keep all variables as they are & submit
+the results to have a baseline. 
+- Amin: create partitions: 
+  1) training sets (80%)
+  2) validation sets (20%)
+  3) test set: need to do any changes to test sets too!
 
 
 
