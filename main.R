@@ -20,5 +20,5 @@ pred<-predict(lmtune, df.test) #df.test is the manipulated df of test
 pred<-exp(pred)
 solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
-          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          paste0("./submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
           row.names = FALSE)
