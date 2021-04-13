@@ -1,0 +1,146 @@
+---
+title: "Data manipulation"
+author: "Amin Shirazi"
+date: "4/13/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(caret)
+
+```
+
+
+## Training data
+```{r}
+train<- read.csv('../data/Queens Training Set.csv') %>% select(- X)
+test <- read.csv('../data/Queens Test Set.csv') %>% select(- X)
+id<-test[ , 1]
+df.train <- read.csv("../data/df.train.csv") %>% dplyr::select(-X) 
+df.validation <- read.csv("../data/df.validation.csv") %>% dplyr::select(-X) 
+
+```
+
+
+```{r}
+df.train <- train %>% select(- c(BOROUGH, NEIGHBORHOOD, BLOCK, LOT, EASE.MENT, ADDRESS, APARTMENT.NUMBER, SALE.DATE, TOTAL.UNITS, BUILDING.CLASS.AT.PRESENT, BUILDING.CLASS.CATEGORY, BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.PRESENT, TAX.CLASS.AT.TIME.OF.SALE)) 
+df.test <- test %>% select(- c(BOROUGH, NEIGHBORHOOD,  BLOCK, LOT, EASE.MENT, ADDRESS, APARTMENT.NUMBER, SALE.DATE, TOTAL.UNITS, BUILDING.CLASS.AT.PRESENT, BUILDING.CLASS.CATEGORY, BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.PRESENT, TAX.CLASS.AT.TIME.OF.SALE))
+```
+
+## Finding the NA's
+```{r}
+# sapply(df.train, function(x) sum(is.na(x)))
+# ind.tax <- which(is.na(df.train$TAX.CLASS.AT.PRESENT))
+# ind.building <- which(is.na(df.train$BUILDING.CLASS.AT.PRESENT))
+# identical(ind.tax, ind.building)
+# df.train <- df.train[-ind.building, ]
+
+```
+
+## Finding zeros in land and gross square feet
+```{r}
+# ind.land <- which(data$LAND.SQUARE.FEET==0)
+# ind.gross <- which(data$GROSS.SQUARE.FEET==0)
+# ind = union(ind.land, ind.gross)
+# data<- data[-ind, ]
+# data[ind.land, ]
+```
+
+
+## Data manipulation
+For now, I did not make any changes on the factor variables, just keep them as they are
+```{r}
+
+data <- df.train %>%
+  mutate(
+         LAND.SQUARE.FEET = log(LAND.SQUARE.FEET +1), 
+         GROSS.SQUARE.FEET = log(GROSS.SQUARE.FEET+1)  , 
+         SALE.PRICE = log(SALE.PRICE)
+         )
+
+```
+
+## Creating partitions
+I used 90% of the training set as our training set to work on and build our predictive models, 
+and save 10% of that as the validation set. Run the following chunk whenever you 
+update the variables of the original data on the first chunk. 
+
+
+```{r}
+
+set.seed(1)
+ind<-createDataPartition(data$SALE.PRICE,times = 1,p = 0.9,list = FALSE)
+df.train <- data[ind, ]
+df.validation <- data[-ind, ]
+write.csv(df.train, "../data/df.train.csv")
+write.csv(df.validation, "../data/df.validation.csv")
+```
+
+## Load training and validation sets
+
+```{r}
+df.train <- read.csv("../data/df.train.csv") %>% dplyr::select(-X) 
+df.validation <- read.csv("../data/df.validation.csv") %>% dplyr::select(-X) 
+
+```
+
+```{r}
+#Fit on 90% of train set
+ctrl=trainControl(method="repeatedcv",repeats = 1,number=5)
+
+lmtune<-train(SALE.PRICE ~ .,
+              data=df.train, 
+              method="lm",
+              trControl=ctrl)
+
+summary(lmtune)
+
+```
+
+## Manipulation on test set
+```{r}
+df.test <- test %>%   
+  mutate(
+         LAND.SQUARE.FEET = log(as.numeric(as.factor(LAND.SQUARE.FEET))+1), 
+         GROSS.SQUARE.FEET = log(as.numeric(as.factor(GROSS.SQUARE.FEET))+1) )
+
+```
+
+## Internal cross validation score
+```{r}
+
+#Evaluate on 10% as the validation set
+y_true=df.validation$SALE.PRICE
+y_pred<-predict(lmtune, df.validation)
+sqrt(mean((log(y_true+1)-log(exp(y_pred)+1))^2)) #or rmsle(y_true,exp(y_pred))
+
+
+```
+
+
+## Submission file
+```{r}
+#Predict on test
+pred<-predict(lmtune, df.test)
+pred<-exp(pred)
+solution<-data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          row.names = FALSE)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
