@@ -13,16 +13,8 @@ abline(v = 1959)
 ```
 
 
-Here is the SEL for basic OLS which doesn't do great. Originally to find the optimal year to use as a cut off value I used optim but it was...unstable... and kept producing incorrect results depending on exactly where I put the search bounds at. Anyway, I just calculated SEL for each year as a cut off point and what I found is 1959 seems like a natrual cut off point where prices become on average higher.
+Here is the SEL for a simple fit mean and basic OLS which doesn't do great. Originally to find the optimal year to use as a cut off value I used optim but it was...unstable... and kept producing incorrect results depending on exactly where I put the search bounds at. Anyway, I just calculated SEL for each year as a cut off point and what I found is 1959 seems like a natrual cut off point where prices become on average higher.
 ```{r, echo = FALSE}
-mod <- lm(log(SALE.PRICE + 1) ~ YEAR.BUILT, data = data)
-
-cat('SEL for basic OLS on year:', sum(mod$residuals^2))
-YEAR.BUILT2 <- data$YEAR.BUILT^2
-mod2 <- lm(log(SALE.PRICE + 1) ~ YEAR.BUILT + YEAR.BUILT2, data = data)
-#SEL for 
-cat('SEL for OLS on polynomial based off year:', sum(mod2$residuals^2))
-
 #Function to optimizae a binary cut off year
 my_year_opt <- function(year){
   #the top half
@@ -33,6 +25,17 @@ my_year_opt <- function(year){
            mean(log(subset(data, YEAR.BUILT <= year)$SALE.PRICE + 1)))^2) 
   return(k)
 }
+
+cat('SEL for a basic mean:', my_year_opt(0))
+mod <- lm(log(SALE.PRICE + 1) ~ YEAR.BUILT, data = data)
+
+cat('SEL for basic OLS on year:', sum(mod$residuals^2))
+YEAR.BUILT2 <- data$YEAR.BUILT^2
+mod2 <- lm(log(SALE.PRICE + 1) ~ YEAR.BUILT + YEAR.BUILT2, data = data)
+#SEL for 
+cat('SEL for OLS on polynomial based off year:', sum(mod2$residuals^2))
+
+
 
 cat('SEL for binary cutoff:', my_year_opt(1959))
 ```
