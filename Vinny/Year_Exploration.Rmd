@@ -1,0 +1,49 @@
+---
+title: "Year_Exploration"
+author: "Vinny Paris"
+date: "4/14/2021"
+output: html_document
+---
+Below is the plot for the mean of each year's log(sales price + 1). The big thing to note is that it stabilizes after ~1959 (the verticle line is the estimated cutoff for a binary 0-1 that minimimizes the SEL for log(price + 1))
+```{r, echo = FALSE}
+data <- read.csv('../data/Queens Training Set.csv')
+plot(aggregate(log(data$SALE.PRICE + 1), list(data$YEAR.BUILT), mean), 
+     xlab = 'Year', ylab = 'Mean of Log(y + 1)')
+abline(v = 1959)
+```
+
+
+Here is the SEL for basic OLS which doesn't do great. Originally to find the optimal year to use as a cut off value I used optim but it was...unstable... and kept producing incorrect results depending on exactly where I put the search bounds at. Anyway, I just calculated SEL for each year as a cut off point and what I found is 1959 seems like a natrual cut off point where prices become on average higher.
+```{r, echo = FALSE}
+mod <- lm(log(SALE.PRICE + 1) ~ YEAR.BUILT, data = data)
+
+cat('SEL for basic OLS on year:', sum(mod$residuals^2))
+YEAR.BUILT2 <- data$YEAR.BUILT^2
+mod2 <- lm(log(SALE.PRICE + 1) ~ YEAR.BUILT + YEAR.BUILT2, data = data)
+#SEL for 
+cat('SEL for OLS on polynomial based off year:', sum(mod2$residuals^2))
+
+#Function to optimizae a binary cut off year
+my_year_opt <- function(year){
+  #the top half
+  k <- sum((log(subset(data, YEAR.BUILT > year)$SALE.PRICE + 1) - 
+        mean(log(subset(data, YEAR.BUILT > year)$SALE.PRICE + 1)))^2) +
+    #the bottom half
+    sum((log(subset(data, YEAR.BUILT <= year)$SALE.PRICE + 1) - 
+           mean(log(subset(data, YEAR.BUILT <= year)$SALE.PRICE + 1)))^2) 
+  return(k)
+}
+
+cat('SEL for binary cutoff:', my_year_opt(1959))
+```
+
+
+To get a sense of this here is the graph that is SEL vs possible cut off years. There seems to be strong drop for placing it around 1955-1970ish.
+```{r, echo = FALSE}
+#Heres a picture of the SEL vs Possible Cut Off Years
+ye <- seq(1900, 2010, 1)
+my_ye <- apply(data.frame(ye), 1, my_year_opt)
+cat('SEL minimized at year:', ye[which.min(my_ye)])
+plot(ye, my_ye, ylab = 'SEL for log(y + 1)', xlab = 'Year As Cutoff Point')
+```
+
