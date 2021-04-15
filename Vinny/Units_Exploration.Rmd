@@ -4,8 +4,8 @@ author: "Vinny Paris"
 date: "4/15/2021"
 output: html_document
 ---
-#Residential Units
-So to me there appears to be two different models happening. The first is everything up to about 4ish where there is a slow but steady gain. After that though the price seems to become pretty much a flat line for the extremely large values of the residential units. I'm unsure what is happening in that regard but I still tried to fit it
+# Residential Units
+So to me there appears to be two different models happening. The first is everything up to about 4ish where there is a slow but steady gain. After that though the price seems to become pretty much a flat line for the extremely large values of the residential units. I think I know why too.
 ```{r, echo = FALSE}
 data <- read.csv('../data/Queens Training Set.csv')
 plot(log(data$RESIDENTIAL.UNITS + 1), log(data$SALE.PRICE + 1),
@@ -38,7 +38,7 @@ plot(x, my_cuts, xlab = 'Proposed cut off point',
 
 
 
-#Total and Commercial units
+# Total and Commercial units
 I do not believe that Total Units or Commercial units are that important. The variance of the commercial units is interesting but I don't think it matters all that much if we just want to estimate means. 
 ```{r, echo = FALSE}
 plot((data$COMMERCIAL.UNITS + 0), log(data$SALE.PRICE + 1))
@@ -49,8 +49,8 @@ plot(log(data$TOTAL.UNITS + 1), log(data$SALE.PRICE + 1))
 
 
 
-#Odd extreme values
-As for the massive units they all appear to be coops. I think I know what is happening. So that whole area appears to be one giant co-op (for example in the 3 buildings with the same largest gross square footage is a co-op with apparently two large apartment buildings and a lot of condos/townhouses that apparently form one neighborhood from my googling). Anyway, these people who own an apartment/house in the co-op sell and  occasionally information is listed with the co-op statistics (ie you bought a condo with 1200 sqft of living space but since you bought into the co-op its posted as the whole of it having some transaction.)
+# Odd extreme values
+I think I know what is happening. As for the massive units they all appear to be coops. So those whole areas appear to be giant co-ops (for example in the 3 buildings with the same largest gross square footage is a co-op with apparently two large apartment buildings and a lot of condos/townhouses from my googling). Anyway, these people who own an apartment/house in the co-op sell and  occasionally information is listed with the co-op statistics (ie you bought a condo with 1200 sqft of living space but since you bought into the co-op its posted as the total living area in the entire co-op.)
 
 
 
