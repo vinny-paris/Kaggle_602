@@ -1,0 +1,59 @@
+---
+title: "Units_Exploration"
+author: "Vinny Paris"
+date: "4/15/2021"
+output: html_document
+---
+#Residential Units
+So to me there appears to be two different models happening. The first is everything up to about 4ish where there is a slow but steady gain. After that though the price seems to become pretty much a flat line for the extremely large values of the residential units. I'm unsure what is happening in that regard but I still tried to fit it
+```{r, echo = FALSE}
+data <- read.csv('../data/Queens Training Set.csv')
+plot(log(data$RESIDENTIAL.UNITS + 1), log(data$SALE.PRICE + 1),
+     xlab = 'Log of Res. Units + 1', ylab = 'Log of Sales Price + 1')
+```
+
+To fit it I used a basic LM where everything before 3.77 was fit with one intercept and slope on log(res_units + 1) and then a secondary intercept and slope for everything past 3.77
+
+```{r, echo = FALSE}
+my_cutter <- function(my_cut){
+  k <- log(data$RESIDENTIAL.UNITS + 1) > my_cut
+  moddy <- lm(log(SALE.PRICE + 1) ~ 0 + k + 
+              log(1 + RESIDENTIAL.UNITS):k, data = data)
+  return(sum(residuals(moddy)^2))
+}
+#Optim is okay but I figure we might as well just find the min 
+#optim(4, my_cutter, method = 'Brent', lower = 3, upper = 5)
+x <- seq(3, 5, .01)
+my_cuts <- apply(data.frame(x), 1, my_cutter)
+cat('SEL with a single mean only: ', sum(resid(lm(log(SALE.PRICE + 1) ~ 
+              1, data = data))^2))
+cat('SEL with basic LM: ', sum(resid(lm(log(SALE.PRICE + 1) ~ 
+              log(1 + RESIDENTIAL.UNITS), data = data))^2))
+cat('SEL with LM on each side of cutoff point: ', min(my_cuts))
+cat('Optimal Cutoff Point: ', x[which.min(my_cuts)])
+plot(x, my_cuts, xlab = 'Proposed cut off point',
+     ylab = 'SEL')
+
+```
+
+
+
+#Total and Commercial units
+I do not believe that Total Units or Commercial units are that important. The variance of the commercial units is interesting but I don't think it matters all that much if we just want to estimate means. 
+```{r, echo = FALSE}
+plot((data$COMMERCIAL.UNITS + 0), log(data$SALE.PRICE + 1))
+plot(log(data$COMMERCIAL.UNITS + 1), log(data$SALE.PRICE + 1))
+plot((data$TOTAL.UNITS + 0), log(data$SALE.PRICE + 1))
+plot(log(data$TOTAL.UNITS + 1), log(data$SALE.PRICE + 1))
+```
+
+
+
+#Odd extreme values
+As for the massive units they all appear to be coops. I think I know what is happening. So that whole area appears to be one giant co-op (for example in the 3 buildings with the same largest gross square footage is a co-op with apparently two large apartment buildings and a lot of condos/townhouses that apparently form one neighborhood from my googling). Anyway, these people who own an apartment/house in the co-op sell and  occasionally information is listed with the co-op statistics (ie you bought a condo with 1200 sqft of living space but since you bought into the co-op its posted as the whole of it having some transaction.)
+
+
+
+```{r, echo = FALSE}
+head(data[order(data$RESIDENTIAL.UNITS, decreasing = TRUE),], 3)
+```
