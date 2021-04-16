@@ -164,6 +164,7 @@ lmtune<-train(SALE.PRICE ~ .,
 summary(lmtune)
 ```
 
+
 ## Manipulation on test set
 ```{r}
 df.test<- test %>%

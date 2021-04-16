@@ -22,3 +22,12 @@ solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
           paste0("./submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
           row.names = FALSE)
+
+
+
+# Ideas and models:
+## Modelling/ for week 04/19
+## LASSO, Ridge, glmnet, knn: Vinny (the one hot encoding)
+## PLS, PCA, decision tree, random forest: SUbrata
+## xgboost, NN: Amin
+## SPLINE, MARS
