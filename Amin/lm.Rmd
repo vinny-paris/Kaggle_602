@@ -19,91 +19,6 @@ df.train <- train %>% select(- c(BOROUGH, NEIGHBORHOOD, BLOCK, LOT, EASE.MENT, A
 df.test <- test %>% select(- c(BOROUGH, NEIGHBORHOOD,  BLOCK, LOT, EASE.MENT, ADDRESS, APARTMENT.NUMBER, SALE.DATE, TOTAL.UNITS, BUILDING.CLASS.AT.PRESENT, BUILDING.CLASS.CATEGORY, BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.PRESENT, TAX.CLASS.AT.TIME.OF.SALE))
 ```
 
-## Finding the NA's
-```{r}
-# sapply(df.train, function(x) sum(is.na(x)))
-# ind.tax <- which(is.na(df.train$TAX.CLASS.AT.PRESENT))
-# ind.building <- which(is.na(df.train$BUILDING.CLASS.AT.PRESENT))
-# identical(ind.tax, ind.building)
-# df.train <- df.train[-ind.building, ]
-```
-
-## Finding zeros in land and gross square feet
-```{r}
-# ind.land <- which(data$LAND.SQUARE.FEET==0)
-# ind.gross <- which(data$GROSS.SQUARE.FEET==0)
-# ind = union(ind.land, ind.gross)
-# data<- data[-ind, ]
-# data[ind.land, ]
-```
-
-
-## Data manipulation
-For now, I did not make any changes on the factor variables, just keep them as they are
-```{r}
-data <- df.train %>%
-  mutate(
-         LAND.SQUARE.FEET = log(LAND.SQUARE.FEET +1), 
-         GROSS.SQUARE.FEET = log(GROSS.SQUARE.FEET+1)  , 
-         SALE.PRICE = log(SALE.PRICE)
-         )
-```
-
-## Creating partitions
-I used 90% of the training set as our training set to work on and build our predictive models, 
-and save 10% of that as the validation set. Run the following chunk whenever you 
-update the variables of the original data on the first chunk. 
-
-
-```{r}
-set.seed(1)
-ind<-createDataPartition(data$SALE.PRICE,times = 1,p = 0.9,list = FALSE)
-df.train <- data[ind, ]
-df.validation <- data[-ind, ]
-write.csv(df.train, "../data/df.train.csv")
-write.csv(df.validation, "../data/df.validation.csv")
-```
-
-## Load training and validation sets
-
-```{r}
-df.train <- read.csv("../data/df.train.csv") %>% dplyr::select(-X) 
-df.validation <- read.csv("../data/df.validation.csv") %>% dplyr::select(-X) 
-```
-
-```{r}
-#Fit on 90% of train set
-ctrl=trainControl(method="repeatedcv",repeats = 1,number=5)
-lmtune<-train(SALE.PRICE ~ .,
-              data=df.train, 
-              method="lm",
-              trControl=ctrl)
-summary(lmtune)
-```
-
-## Manipulation on test set
-```{r}
-df.test <- test %>%   
-  mutate(
-         LAND.SQUARE.FEET = log(as.numeric(as.factor(LAND.SQUARE.FEET))+1), 
-         GROSS.SQUARE.FEET = log(as.numeric(as.factor(GROSS.SQUARE.FEET))+1) )
-```
-
-## Internal cross validation score
-```{r}
-#Evaluate on 10% as the validation set
-y_true=df.validation$SALE.PRICE
-y_pred<-predict(lmtune, df.validation)
-sqrt(mean((log(y_true+1)-log(exp(y_pred)+1))^2)) #or rmsle(y_true,exp(y_pred))
-```
-
-
-
-
-
-
-
-
 
 ## Training data
 ```{r}
@@ -111,6 +26,7 @@ train<- read.csv('../data/train.csv') %>% select(- X)
 test <- read.csv('../data/Queens Test Set.csv') %>% select(- X, -X.1)
 id<-test[ , "INDEX"]
 test<- test %>% select(-INDEX)
+names(train)
 ```
 
 
@@ -122,17 +38,12 @@ rm.var <- c('BOROUGH',
             'EASE.MENT', 
             'ADDRESS', 
             'APARTMENT.NUMBER',
-            'SALE.DATE', 
-            'TOTAL.UNITS', 
-            'YEAR.BUILT', 
-            'year_cutoff'
+            'TOTAL.UNITS'
             )
 
 df.train <- train %>% select(- c(rm.var) )
 df.test <- test %>% select(- c(rm.var))
 ```
-
-
 
 
 
@@ -147,9 +58,25 @@ d <- df.train %>%
          TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
          TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
 
-dt<- d %>% select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
-                  - BUILDING.CLASS.AT.TIME.OF.SALE, -BUILDING.CLASS.CATEGORY)
+d<- d %>% select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
+                  -BUILDING.CLASS.CATEGORY, 
+                  -SALE.DATE)
+
+d<-d[-which(d$YEAR.BUILT %>% is.na()), ]
+names(d)
 ```
+
+```{r, eval=FALSE}
+fact<- df.train %>% select(BUILDING.CLASS.CATEGORY, TAX.CLASS.AT.PRESENT, BUILDING.CLASS.AT.PRESENT, 
+                           BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.TIME.OF.SALE)
+dmy <- dummyVars(" ~ .", data = fact)
+trsf <- data.frame(predict(dmy, newdata = fact))
+
+train.oh<-bind_cols(trsf, dt)
+train.oh<- train.oh[-which(train.oh$YEAR.BUILT %>% is.na()), ]
+
+```
+
 
 
 ```{r}
@@ -157,17 +84,26 @@ dt<- d %>% select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE,
 ctrl=trainControl(method="repeatedcv",repeats = 10,number=10)
 
 lmtune<-train(SALE.PRICE ~ .,
-              data=dt, 
+              data=d, 
               method="lm",
               trControl=ctrl)
 
 summary(lmtune)
+# 0.4092
+
 ```
 
 
 ## Manipulation on test set
 ```{r}
-df.test<- test %>%
+dtest<- df.test %>%
+  mutate(
+    BUILDING.CLASS.CATEGORY = str_trim(BUILDING.CLASS.CATEGORY, 'both'), 
+    BUILDING.CLASS.AT.PRESENT = str_trim(BUILDING.CLASS.AT.PRESENT, 'both'), 
+    BUILDING.CLASS.AT.TIME.OF.SALE = str_trim(BUILDING.CLASS.AT.TIME.OF.SALE, 'both'), 
+    TAX.CLASS.AT.PRESENT = str_trim(TAX.CLASS.AT.PRESENT, 'both'), 
+    TAX.CLASS.AT.TIME.OF.SALE = str_trim(TAX.CLASS.AT.TIME.OF.SALE, 'both'), 
+    SALE.DATE = str_trim(SALE.DATE, 'both')) %>% 
   mutate(
          BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
          BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
@@ -177,7 +113,23 @@ df.test<- test %>%
          LAND.SQUARE.FEET = log(as.numeric(as.factor(LAND.SQUARE.FEET))+1), 
          GROSS.SQUARE.FEET = log(as.numeric(as.factor(GROSS.SQUARE.FEET))+1)) %>% 
   select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
-         - BUILDING.CLASS.AT.TIME.OF.SALE, -BUILDING.CLASS.CATEGORY)
+                  -BUILDING.CLASS.CATEGORY,  
+         -SALE.DATE)
+
+```
+
+
+
+```{r}
+fact<- df.test %>% select(BUILDING.CLASS.CATEGORY, TAX.CLASS.AT.PRESENT, BUILDING.CLASS.AT.PRESENT, 
+                           BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.TIME.OF.SALE)
+tt<- df.test %>% select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
+                  - BUILDING.CLASS.AT.TIME.OF.SALE, -BUILDING.CLASS.CATEGORY, -TAX.CLASS.AT.PRESENT)
+dmy <- dummyVars(" ~ .", data = fact)
+trsf <- data.frame(predict(dmy, newdata = fact))
+
+test.oh<-bind_cols(trsf, tt)
+names(train.oh)
 ```
 
 
@@ -185,7 +137,7 @@ df.test<- test %>%
 ## Submission file
 ```{r}
 #Predict on test
-pred<-predict(lmtune, df.test)
+pred<-predict(lmtune, dtest)
 pred<-exp(pred)
 solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
@@ -194,6 +146,10 @@ write.csv(solution,
 ```
 
 
+```{r}
+d$BUILDING.CLASS.AT.TIME.OF.SALE %>% levels()
+dtest$BUILDING.CLASS.AT.TIME.OF.SALE %>% levels()
+```
 
 
 

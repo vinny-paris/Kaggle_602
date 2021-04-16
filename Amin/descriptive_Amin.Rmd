@@ -259,6 +259,9 @@ d[jndx, "GROSS.SQUARE.FEET"]<- replace[5]
 }
 
 
+
+
+
 d<- d[- which(d$LAND.SQUARE.FEET %>% is.na()), ]
 d <- d %>% mutate(LAND.SQUARE.FEET = log(LAND.SQUARE.FEET+ 1), 
                   GROSS.SQUARE.FEET = log(GROSS.SQUARE.FEET + 1), 
