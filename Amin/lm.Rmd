@@ -154,10 +154,3 @@ dtest$BUILDING.CLASS.AT.TIME.OF.SALE %>% levels()
 
 
 
-
-
-
-
-
-
-
