@@ -1,0 +1,203 @@
+---
+title: "NY real estate"
+author: "Amin Shirazi, modified by Subrata Pal"
+date: "4/8/2021"
+output: 
+  html_document:
+    mathjax: default
+    number_sections: true
+    toc: yes
+    toc_depth: 5
+    df_print: paged
+    highlight: tango
+    code_folding: hide
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(caret)
+```
+
+```{css, echo=FALSE}
+pre {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+pre[class] {
+  max-height: 100px;
+}
+```
+
+```{r}
+train<- read.csv('../data/Queens Training Set.csv') %>% select(- X)
+test <- read.csv('../data/Queens Test Set.csv') %>% select(- c(X.1))
+str(train)
+str(test)
+```
+
+- **BOROUGH** is all equal to 4, **Easement** is all NA - removing those. 
+
+```{r, name=Remove_cols}
+train$BOROUGH <- NULL
+train$EASE.MENT <- NULL
+```
+
+
+# Work of Amin mostly, 
+
+## Subrata added date format, ...
+## I guess we have to add union of labels for similar kind of factors.
+
+## working on NA's and zeros
+```{r}
+df.train <- train %>% 
+  mutate(NEIGHBORHOOD = as.factor(NEIGHBORHOOD), 
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE),
+         SALE.DATE = as.Date(SALE.DATE, "%Y-%m-%d"))
+```
+
+
+## Dealing with NA's in the data and the unusual land square feet + # of units
+```{r}
+d = df.train %>% distinct()
+d[which(train$BUILDING.CLASS.AT.PRESENT %>% is.na()), "BUILDING.CLASS.AT.PRESENT"] <- 
+  d[which(train$BUILDING.CLASS.AT.PRESENT %>% is.na()), "BUILDING.CLASS.AT.TIME.OF.SALE"]
+
+d[which(train$TAX.CLASS.AT.PRESENT %>% is.na()), "TAX.CLASS.AT.PRESENT"] <- 
+  d[which(train$TAX.CLASS.AT.PRESENT %>% is.na()), "TAX.CLASS.AT.TIME.OF.SALE"]
+
+
+d<- d[-which(d$LAND.SQUARE.FEET==12253428), ]
+
+
+
+
+## Same co-op as suggested by Vinney:
+# 
+# sort(d$LAND.SQUARE.FEET, decreasing=T)[1:50]
+# 
+# ## same neighbourhood, different address:
+# d[which(d$LAND.SQUARE.FEET == 1584225),]
+# 
+# ## Same house, resell of different year - any specific thing?
+# # Sell date and sales prices are different
+# test_sq_ft <- d[which(d$LAND.SQUARE.FEET == 413302),]
+# test_sq_ft$SALE.DATE
+# test_sq_ft$SALE.PRICE
+# 
+# plot(test_sq_ft$SALE.DATE, test_sq_ft$SALE.PRICE)
+# (Infaltion <- read.csv('../data/inflation.csv'))
+# 
+# sort(d$RESIDENTIAL.UNITS, decreasing = T)[1:20]
+
+
+
+
+
+
+
+
+replace<- d %>% filter(grepl("150 STREET",ADDRESS)) %>% filter(LAND.SQUARE.FEET>0 & LAND.SQUARE.FEET<1584225) %>% 
+  select(RESIDENTIAL.UNITS, COMMERCIAL.UNITS, TOTAL.UNITS, LAND.SQUARE.FEET, GROSS.SQUARE.FEET, SALE.PRICE) %>% 
+  apply(2, median)
+
+ind<- which(d$RESIDENTIAL.UNITS==685)
+d[ind, "RESIDENTIAL.UNITS"]<- replace[1]
+d[ind, "COMMERCIAL.UNITS"]<- replace[2]
+d[ind, "TOTAL.UNITS"]<- replace[3]
+d[ind, "LAND.SQUARE.FEET"]<- replace[4]
+d[ind, "GROSS.SQUARE.FEET"]<- replace[5]
+
+
+ind = d %>% filter(LAND.SQUARE.FEET==0) %>% select(ZIP.CODE) %>% unique()
+for (i in 1:dim(ind)[1]) {
+  
+replace<- d %>% filter(ZIP.CODE==ind$ZIP.CODE[i]) %>% 
+  select(RESIDENTIAL.UNITS, COMMERCIAL.UNITS, TOTAL.UNITS, LAND.SQUARE.FEET, GROSS.SQUARE.FEET, SALE.PRICE) %>% 
+  filter(LAND.SQUARE.FEET>0) %>% apply(2, median)
+jndx = which(d$ZIP.CODE == ind$ZIP.CODE[i] & d$LAND.SQUARE.FEET==0)
+
+
+d[jndx, "RESIDENTIAL.UNITS"]<- replace[1]
+d[jndx, "COMMERCIAL.UNITS"]<- replace[2]
+d[jndx, "TOTAL.UNITS"]<- replace[3]
+d[jndx, "LAND.SQUARE.FEET"]<- replace[4]
+d[jndx, "GROSS.SQUARE.FEET"]<- replace[5]
+
+}
+
+ind = d %>% filter(GROSS.SQUARE.FEET==0) %>% select(ZIP.CODE) %>% unique()
+for (i in 1:dim(ind)[1]) {
+  
+replace<- d %>% filter(ZIP.CODE==ind$ZIP.CODE[i]) %>% 
+  select(RESIDENTIAL.UNITS, COMMERCIAL.UNITS, TOTAL.UNITS, LAND.SQUARE.FEET, GROSS.SQUARE.FEET, SALE.PRICE) %>% 
+  filter(GROSS.SQUARE.FEET>0) %>% apply(2, median)
+jndx = which(d$ZIP.CODE == ind$ZIP.CODE[i] & d$GROSS.SQUARE.FEET==0)
+
+
+d[jndx, "RESIDENTIAL.UNITS"]<- replace[1]
+d[jndx, "COMMERCIAL.UNITS"]<- replace[2]
+d[jndx, "TOTAL.UNITS"]<- replace[3]
+d[jndx, "GROSS.SQUARE.FEET"]<- replace[5]
+
+}
+
+
+d<- d[- which(d$LAND.SQUARE.FEET %>% is.na()), ]
+d <- d %>% mutate(LAND.SQUARE.FEET = log(LAND.SQUARE.FEET+ 1), 
+                  GROSS.SQUARE.FEET = log(GROSS.SQUARE.FEET + 1), 
+                  SALE.PRICE = log(SALE.PRICE + 1))
+write.csv(d, '../data/train.csv')
+```
+
+
+
+```{r}
+id = test$INDEX
+dt <- test %>% select(-c(INDEX, X,  BOROUGH, EASE.MENT))
+str(dt)
+
+dt$BUILDING.CLASS.AT.TIME.OF.SALE <- stringr::str_trim(dt$BUILDING.CLASS.AT.TIME.OF.SALE)
+
+dt <- dt %>% 
+ mutate(NEIGHBORHOOD = as.factor(NEIGHBORHOOD), 
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
+         LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+         GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)),
+         BUILDING.CLASS.AT.TIME.OF.SALE = stringr::str_trim(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         SALE.DATE = as.Date(SALE.DATE, "%m/%d/%Y")
+        ) 
+
+
+dt %>% select(BUILDING.CLASS.CATEGORY, BUILDING.CLASS.AT.PRESENT, BUILDING.CLASS.AT.TIME.OF.SALE,) %>% 
+  mutate(diff.category = ifelse('BUILDING.CLASS.AT.PRESENT' == 'BUILDING.CLASS.AT.TIME.OF.SALE', 0, 1)) %>% 
+  filter(diff.category == 1)
+
+
+
+# dt[which(dt$BUILDING.CLASS.AT.PRESENT == dt$BUILDING.CLASS.AT.TIME.OF.SALE), ]
+
+
+dt <- dt %>% mutate(LAND.SQUARE.FEET = log(LAND.SQUARE.FEET+ 1), 
+                  GROSS.SQUARE.FEET = log(GROSS.SQUARE.FEET + 1))
+d
+write.csv(dt, '../data/test.csv')
+```
+
+
+
+
+
+

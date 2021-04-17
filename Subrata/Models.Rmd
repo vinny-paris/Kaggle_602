@@ -1,0 +1,195 @@
+---
+title: "Models"
+author: "Subrata Pal"
+date: "4/15/2021"
+output: html_document
+---
+
+## Preprocessing etc:
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(caretEnsemble)
+
+rm(list=ls())
+traindat <- read.csv("../data/train.csv")
+testdat <- read.csv("../data/test.csv")
+
+
+traindat <- traindat %>% 
+ mutate(NEIGHBORHOOD = as.factor(NEIGHBORHOOD), 
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
+         LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+         GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)),
+         BUILDING.CLASS.AT.TIME.OF.SALE = stringr::str_trim(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         SALE.DATE = as.Date(SALE.DATE)
+        ) 
+
+
+
+
+testdat <- testdat %>% 
+ mutate(NEIGHBORHOOD = as.factor(NEIGHBORHOOD), 
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
+         LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+         GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)),
+         SALE.DATE = as.Date(SALE.DATE)
+        ) 
+
+
+
+
+
+str(traindat)
+str(testdat)
+
+id <- testdat$X
+
+rm.var <- c('X',
+            'ADDRESS', 
+            'APARTMENT.NUMBER', 
+            'NEIGHBORHOOD',
+            'BUILDING.CLASS.CATEGORY'
+            )
+## NBD, BUILDING.CLASS.CATEGORY has a new level in test data
+
+df.train <- traindat %>% select(-c(rm.var) )
+df.test <- testdat %>% select(-c(rm.var))
+
+png("NA.png")
+image(is.na(df.train))
+dev.off()
+
+colSums(is.na(df.train))
+
+df.train.no.NA <- df.train %>% select(-c("TAX.CLASS.AT.PRESENT",
+                                   "BUILDING.CLASS.AT.PRESENT",
+                                   "YEAR.BUILT",
+                                   "year_cutoff"))
+
+```
+
+
+
+## Model fitting:
+
+### Settings: 
+```{r}
+ctrl <- trainControl(method="LOOCV", savePredictions='final')
+ctrl_2 <- trainControl(method="cv", number=3, savePredictions='final')
+ctrl_3 <- trainControl(method="repeatedcv", number=6, repeats = 5, 
+                       savePredictions='final')
+
+# library(doParallel)
+# cl <- makeForkCluster(15)
+# registerDoParallel(cl)
+
+```
+
+
+### 
+```{r}
+class_gbm_1 <- train(SALE.PRICE ~ . , 
+                   data = df.train, trControl = ctrl_3, 
+                   preProcess = c("center","scale"), method = "gbm",
+                   na.action = na.pass, 
+                   tuneGrid = expand.grid(n.trees=(1:6)*50, interaction.depth=1:3, 
+                                         shrinkage=0.1, n.minobsinnode=10))
+saveRDS(class_gbm_1, "gbm_class.rds")
+
+class_gbm_2 <- train(SALE.PRICE ~ . , 
+                   data = df.train.no.NA, trControl = ctrl_3, 
+                   preProcess = c("center","scale"), method = "gbm",
+                   tuneGrid = expand.grid(n.trees=(1:6)*50, interaction.depth=1:3, 
+                                         shrinkage=0.1, n.minobsinnode=10))
+saveRDS(class_gbm_2, "gbm_class_no_NA.rds")
+
+
+class_rpart_1 <- train(SALE.PRICE ~ ., data = df.train, trControl = ctrl_3, 
+                   preProcess = c("center","scale"), method = "rpart",
+                   na.action = na.pass)
+saveRDS(class_rpart_1, "rpart_class.rds")
+
+
+class_rpart_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
+                   preProcess = c("center","scale"), method = "rpart")
+saveRDS(class_rpart_2, "rpart_class_no_NA.rds")
+
+
+
+class_ranger_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
+                   method = "ranger",preProcess = c("center","scale"),
+                   na.action = na.pass)
+saveRDS(class_ranger_2, "ranger_class_no_NA.rds")
+
+
+
+class_pls_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
+                   method = "pls",preProcess = c("center","scale"))
+saveRDS(class_pls_2, "pls_class_no_NA.rds")
+
+class_pcr_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
+                   method = "pcr",preProcess = c("center","scale"))
+saveRDS(class_pcr_2, "pcr_class_no_NA.rds")
+
+class_earth_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
+                   method = "earth",preProcess = c("center","scale"))
+saveRDS(class_earth_2, "earth_class_no_NA.rds")
+
+
+
+class_cubist_1 <- train(SALE.PRICE ~ ., data = df.train, trControl = ctrl_3, 
+                   method = "cubist", 
+                   na.action = na.pass)
+saveRDS(class_cubist_2, "c50_class_no_NA.rds")
+
+
+```
+
+
+
+### Predict:
+```{r}
+(class_gbm_1 <- readRDS("gbm_class.rds"))
+(class_gbm_2 <- readRDS("gbm_class_no_NA.rds"))
+(class_rpart_1 <- readRDS("rpart_class.rds"))
+(class_rpart_2 <- readRDS("rpart_class_no_NA.rds"))
+(class_ranger_2 <- readRDS("ranger_class_no_NA.rds"))
+(class_pls_2 <- readRDS("pls_class_no_NA.rds"))
+(class_pcr_2 <- readRDS("pcr_class_no_NA.rds"))
+(class_earth_2 <- readRDS("earth_class_no_NA.rds"))
+(class_cubist_2 <- readRDS("cubist_class_no_NA.rds"))
+
+
+
+setwd("..")
+
+pred<- predict(class_gbm_1, df.test) #df.test is the manipulated df of test 
+pred<- exp(pred)
+solution <- data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("./submission/solution", 
+                 format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          row.names = FALSE)
+
+
+pred<- predict(class_rpart, df.test) #df.test is the manipulated df of test 
+pred<- exp(pred)
+solution <- data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("./submission/solution", 
+                 format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          row.names = FALSE)
+```
+
