@@ -1,0 +1,453 @@
+---
+title: "nn"
+author: "Amin Shirazi"
+date: "4/19/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,dev = 'png', fig.align = "center", message = FALSE, error = FALSE)
+library(tidyverse)
+library(vip)       # variable importance
+library(pdp)       # variable relationships
+library(Boruta)
+library(keras)
+library(tfdatasets)
+library(caret)
+```
+
+
+```{r}
+rm.var <- c('X',
+            'BOROUGH',
+            'NEIGHBORHOOD',
+            'BLOCK', 
+            'LOT', 
+            'EASE.MENT', 
+            'ADDRESS', 
+            'APARTMENT.NUMBER',
+            'TOTAL.UNITS', 
+            "SALE.DATE"
+            )
+train <- read.csv('../../data/train.csv')
+train <- train %>% select(- all_of(rm.var))
+
+test<- read.csv('../../data/test.csv')
+id<-test[ , "INDEX"]
+test <- test %>% select(-X, -INDEX, - all_of(rm.var))
+```
+
+
+
+```{r}
+train.num  <- train %>%
+            filter(!YEAR.BUILT %>% is.na()) %>% 
+            select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+                      mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                             year_cutoff = as.double(year_cutoff)) 
+dfact <- train %>%
+            filter(!YEAR.BUILT %>% is.na()) %>% 
+                            select(c(BUILDING.CLASS.CATEGORY, 
+                            TAX.CLASS.AT.PRESENT, 
+                            BUILDING.CLASS.AT.PRESENT, 
+                            BUILDING.CLASS.AT.TIME.OF.SALE, 
+                            TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+     mutate(
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
+
+dummy <- dummyVars(" ~ .", data=dfact)
+newdata <- data.frame(predict(dummy, newdata = dfact))
+train.oh <- bind_cols(newdata, train.num)
+# df.train = train %>% 
+#      mutate(
+#          BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+#          BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+#          BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+#          TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+#          TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
+
+
+# fact<- dfact
+# dmy <- dummyVars(" ~ .", data = fact)
+# trsf <- data.frame(predict(dmy, newdata = data.frame(fact)))
+# trsf<- trsf %>% normalize()
+# train.oh<-bind_cols(trsf, dminmax)
+
+```
+
+
+
+
+
+
+```{r}
+data <- train.oh
+spec <- feature_spec(data, SALE.PRICE ~ . ) %>% 
+  step_numeric_column(all_numeric(), normalizer_fn = scaler_min_max()) %>% 
+  fit()
+
+layer <- layer_dense_features(
+  feature_columns = dense_features(spec), 
+  dtype = tf$float32
+)
+
+
+build_model <- function() {
+  input <- layer_input_from_dataset(data %>% select(-SALE.PRICE))
+  
+  output <- input %>%  
+    layer_dense_features(dense_features(spec)) %>% 
+    layer_dense(units = 100, activation = "relu") %>%
+    layer_dense(units = 40, activation = "relu") %>%
+    layer_dense(units = 1) 
+  
+  model <- keras_model(input, output)
+  
+  model %>% 
+    compile(
+      loss = "mse",
+      optimizer = optimizer_sgd(lr = 0.001, decay = 1e-6, momentum = 0.9, nesterov = TRUE))
+  
+  model
+}
+```
+
+```{r}
+print_dot_callback <- callback_lambda(
+  on_epoch_end = function(epoch, logs) {
+    if (epoch %% 80 == 0) cat("\n")
+    cat(".")
+  }
+)
+model <- build_model()
+
+history_A <- model %>% fit(
+  x = data %>% select(- SALE.PRICE),
+  y = data$SALE.PRICE,
+  batch_size = 64,
+  epochs = 500,
+  validation_split = 0.2,
+  verbose = 0,
+  callbacks = list(print_dot_callback)
+
+)
+plot(history_A) 
+#saveRDS(history_A, "./nn_with_zip.rds")
+
+```
+
+
+```{r}
+history_A <- read_rds("./nn_with_zip.rds")
+normalize <- function(data = train.num, x, name){
+
+    xx <- data[, paste(name)]
+    return((x- min(xx)) /(max(xx)-min(xx)))
+}
+
+dtest<- test %>% select(-res_units_cutoff) %>% 
+         mutate(BUILDING.CLASS.CATEGORY = str_trim(BUILDING.CLASS.CATEGORY, "both"), 
+                BUILDING.CLASS.AT.PRESENT = str_trim(BUILDING.CLASS.AT.PRESENT, "both"), 
+                BUILDING.CLASS.AT.TIME.OF.SALE = str_trim(BUILDING.CLASS.AT.TIME.OF.SALE, "both"), 
+                TAX.CLASS.AT.PRESENT = str_trim(TAX.CLASS.AT.PRESENT, "both"), 
+                TAX.CLASS.AT.TIME.OF.SALE = str_trim(TAX.CLASS.AT.TIME.OF.SALE, "both"), 
+                LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+                GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET))
+                )
+test.num  <- dtest %>%
+            select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+                      mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                             year_cutoff = as.double(year_cutoff))
+
+test.num.scal <- test.num %>%
+  mutate(ZIP.CODE = normalize(x = ZIP.CODE, name = "ZIP.CODE"),
+         RESIDENTIAL.UNITS = normalize(x = RESIDENTIAL.UNITS, name = "RESIDENTIAL.UNITS"),
+         COMMERCIAL.UNITS = normalize(x= COMMERCIAL.UNITS, name = "COMMERCIAL.UNITS"),
+         LAND.SQUARE.FEET = normalize(x= LAND.SQUARE.FEET, name = "LAND.SQUARE.FEET"),
+         GROSS.SQUARE.FEET = normalize(x = GROSS.SQUARE.FEET, name = "GROSS.SQUARE.FEET"),
+         YEAR.BUILT = normalize(x= YEAR.BUILT, name = "YEAR.BUILT"),
+         year_cutoff = normalize(x = year_cutoff, name = "year_cutoff"),
+         lon = normalize(x = lon, name = "lon"),
+         lat = normalize(x = lat, name = "lat")
+         )
+
+test_fact <- dtest %>%
+            select(c(BUILDING.CLASS.CATEGORY, 
+            TAX.CLASS.AT.PRESENT, 
+            BUILDING.CLASS.AT.PRESENT, 
+            BUILDING.CLASS.AT.TIME.OF.SALE, 
+            TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+           mutate(
+               BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+               BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+               BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+               TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+               TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+
+dummy <- dummyVars("~.", data=test_fact)
+newdata <- data.frame(predict(dummy, newdata = test_fact))
+test.oh <- bind_cols(newdata, test.num.scal)
+
+names(test.oh)
+names(train.oh)
+```
+
+
+
+```{r}
+
+pred <- model %>% predict(test.num)
+
+pred<-exp(pred)
+solution<-data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("../../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "_nn_w_zip2.csv"), 
+          row.names = FALSE)
+```
+
+
+
+
+
+## Partition train set 
+```{r}
+train <- train %>%  filter(!YEAR.BUILT %>% is.na()) 
+ind = createDataPartition(y = train$SALE.PRICE, times = 1, p = 0.2)
+x_test <- train[ind$Resample1, ]
+x_train <- train[-ind$Resample1, ]
+```
+
+
+```{r}
+train.num  <- x_train %>%
+            select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+                      mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                             year_cutoff = as.double(year_cutoff)) 
+dfact <- x_train %>%
+        select(c(BUILDING.CLASS.CATEGORY, 
+        TAX.CLASS.AT.PRESENT, 
+        BUILDING.CLASS.AT.PRESENT, 
+        BUILDING.CLASS.AT.TIME.OF.SALE, 
+        TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+     mutate(
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
+
+dummy <- dummyVars(" ~ .", data=dfact)
+newdata <- data.frame(predict(dummy, newdata = dfact))
+train.oh <- bind_cols(newdata, train.num)
+
+```
+
+
+
+```{r}
+data <- train.oh
+spec <- feature_spec(data, SALE.PRICE ~ . ) %>% 
+  step_numeric_column(all_numeric(), normalizer_fn = scaler_min_max()) %>% 
+  fit()
+
+layer <- layer_dense_features(
+  feature_columns = dense_features(spec), 
+  dtype = tf$float32
+)
+
+
+build_model <- function() {
+  input <- layer_input_from_dataset(data %>% select(-SALE.PRICE))
+  
+  output <- input %>%  
+    layer_dense_features(dense_features(spec)) %>% 
+    layer_dense(units = 100, activation = "relu") %>%
+    layer_dense(units = 40, activation = "relu") %>%
+    layer_dense(units = 1) 
+  
+  model <- keras_model(input, output)
+  
+  model %>% 
+    compile(
+      loss = "mse",
+      optimizer = optimizer_sgd(lr = 0.001, decay = 1e-6, momentum = 0.9, nesterov = TRUE))
+  
+  model
+}
+```
+
+```{r}
+print_dot_callback <- callback_lambda(
+  on_epoch_end = function(epoch, logs) {
+    if (epoch %% 80 == 0) cat("\n")
+    cat(".")
+  }
+)
+model <- build_model()
+
+history_A <- model %>% fit(
+  x = train.oh %>% select(- SALE.PRICE),
+  y = train.oh$SALE.PRICE,
+  batch_size = 32,
+  epochs = 500,
+  validation_split = 0.2,
+  verbose = 0,
+  callbacks = list(print_dot_callback)
+
+)
+plot(history_A) + ylim(0, 1)
+#saveRDS(history_A, "./nn_with_zip.rds")
+
+```
+
+```{r}
+df_test <- x_test %>% 
+            select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE, 
+                      SALE.PRICE)) %>% 
+                      mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                             year_cutoff = as.double(year_cutoff)) 
+x_test_fact <- x_test %>% 
+  select(c(BUILDING.CLASS.CATEGORY, 
+        TAX.CLASS.AT.PRESENT, 
+        BUILDING.CLASS.AT.PRESENT, 
+        BUILDING.CLASS.AT.TIME.OF.SALE, 
+        TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+     mutate(
+         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
+
+dummy <- dummyVars(" ~ .", data=x_test_fact)
+newdata <- data.frame(predict(dummy, newdata = x_test_fact))
+x_test.oh <- bind_cols(newdata, df_test)
+
+
+y <- model %>% predict(x_test.oh)
+sqrt(sum(na.rm = T, (y - x_test$SALE.PRICE)^2)/nrow(test))
+
+```
+
+
+
+
+```{r}
+history_A <- read_rds("./nn_with_zip.rds")
+normalize <- function(data = train.num, x, name){
+    
+    xx <- data[, paste(name)]
+    return((x- min(xx)) /(max(xx)-min(xx)))
+}
+
+dtest<- test %>% select(-res_units_cutoff) %>% 
+  mutate(BUILDING.CLASS.CATEGORY = str_trim(BUILDING.CLASS.CATEGORY, "both"), 
+                BUILDING.CLASS.AT.PRESENT = str_trim(BUILDING.CLASS.AT.PRESENT, "both"), 
+                BUILDING.CLASS.AT.TIME.OF.SALE = str_trim(BUILDING.CLASS.AT.TIME.OF.SALE, "both"), 
+                TAX.CLASS.AT.PRESENT = str_trim(TAX.CLASS.AT.PRESENT, "both"), 
+                TAX.CLASS.AT.TIME.OF.SALE = str_trim(TAX.CLASS.AT.TIME.OF.SALE, "both"), 
+                LAND.SQUARE.FEET = log(as.numeric(as.factor(LAND.SQUARE.FEET))+1), 
+                GROSS.SQUARE.FEET = log(as.numeric(as.factor(GROSS.SQUARE.FEET))+1)
+                )
+test.num  <- dtest %>%
+            select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+                      mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                             year_cutoff = as.double(year_cutoff))
+
+test.num.scal <- test.num %>% 
+  mutate(ZIP.CODE = normalize(x = ZIP.CODE, name = "ZIP.CODE"), 
+         RESIDENTIAL.UNITS = normalize(x = RESIDENTIAL.UNITS, name = "RESIDENTIAL.UNITS"), 
+         COMMERCIAL.UNITS = normalize(x= COMMERCIAL.UNITS, name = "COMMERCIAL.UNITS"), 
+         LAND.SQUARE.FEET = normalize(x= LAND.SQUARE.FEET, name = "LAND.SQUARE.FEET"), 
+         GROSS.SQUARE.FEET = normalize(x = GROSS.SQUARE.FEET, name = "GROSS.SQUARE.FEET"), 
+         YEAR.BUILT = normalize(x= YEAR.BUILT, name = "YEAR.BUILT"), 
+         year_cutoff = normalize(x = year_cutoff, name = "year_cutoff"), 
+         lon = normalize(x = lon, name = "lon"), 
+         lat = normalize(x = lat, name = "lat")
+         )
+
+test_fact <- dtest %>%
+            select(c(BUILDING.CLASS.CATEGORY, 
+            TAX.CLASS.AT.PRESENT, 
+            BUILDING.CLASS.AT.PRESENT, 
+            BUILDING.CLASS.AT.TIME.OF.SALE, 
+            TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+           mutate(
+               BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+               BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+               BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+               TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+               TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+
+dummy <- dummyVars("~.", data=test_fact)
+newdata <- data.frame(predict(dummy, newdata = test_fact))
+test.oh <- bind_cols(newdata, test.num.scal)
+
+```
+
+
+
+```{r}
+
+pred <- model %>% predict(test.oh)
+
+pred<-exp(pred)
+solution<-data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("../../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "_nn_w_zip2.csv"), 
+          row.names = FALSE)
+```
+
+
+
+
+## Borouta
+```{r}
+dtrain  <- train %>%
+            filter(!YEAR.BUILT %>% is.na()) %>% 
+            mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                   year_cutoff = as.double(year_cutoff), 
+                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+
+
+boruta.train <- Boruta(SALE.PRICE~., data = dtrain, doTrace = 2)
+plot(boruta.train)
+```
+
+
+
+
+
+
+
+
+
+
