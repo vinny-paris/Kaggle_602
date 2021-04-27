@@ -18,7 +18,7 @@ library(caret)
 
 
 ```{r}
-rm.var <- c('X',
+rm.var <- c(
             'BOROUGH',
             'NEIGHBORHOOD',
             'BLOCK', 
@@ -80,6 +80,7 @@ train.oh <- bind_cols(newdata, train.num)
 # trsf <- data.frame(predict(dmy, newdata = data.frame(fact)))
 # trsf<- trsf %>% normalize()
 # train.oh<-bind_cols(trsf, dminmax)
+names(train.oh)
 
 ```
 
