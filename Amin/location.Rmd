@@ -16,8 +16,8 @@ library(ggmap)
 
 
 ```{r}
-train<- read.csv('../data/train.csv') %>% select(- X)
-test <- read.csv('../data/test.csv') %>% select(- X)
+train<- read.csv('../data/train.csv') 
+test <- read.csv('../data/test.csv')
 ```
 
 
@@ -43,8 +43,7 @@ test <- read.csv('../data/test.csv') %>% select(- X)
 ```{r}
 get_local_spot <-  get_map("Queens", maptype = "roadmap", zoom = 10) 
 ggmap(get_local_spot) + 
-   geom_point(data = train, aes(x = lon, y = lat), color = "navy", size = 1) +
-   geom_point(data = filter(train, SALE.PRICE > 14), aes(x = lon, y = lat),  color = "red", size = 1)
+   geom_point(data = train, aes(x = lon, y = lat), color = "navy", size = 1) 
 ```
 
 
@@ -71,12 +70,34 @@ ggmap(get_local_spot) +
 
 
 ```{r}
-get_local_spot <-  get_map("Queens", maptype = "roadmap", zoom = 10) 
 ggmap(get_local_spot) + 
    geom_point(data = test, aes(x = lon, y = lat), color = "navy", size = 1) 
 ```
 
+```{r}
+train %>% ggplot(aes(lat)) + geom_boxplot()
+train %>% ggplot(aes(lon)) + geom_boxplot()
+```
 
 
+```{r}
+loc <- data.table::fread("./xgb/US.txt")
+ny <- loc %>% filter(V4== "New York", V5=="NY") %>% select(V2, V10, V11)
+ny.loc <- ny %>% filter(V6 =="Queens")
+names(ny) <- c("ZIP.CODE", "Lat", "Long")
 
+d = left_join(train, ny, by = "ZIP.CODE")
+d %>% ggplot(aes(Lat)) + geom_boxplot()
+d<- d %>% select(-lat, -lon)
+names(d)[23:24]<- c("lat", "lon")
+write.csv(d, "../data/train.csv")
+
+```
+
+```{r}
+d = left_join(test, ny, by = "ZIP.CODE")
+d<- d %>% select(-lat, -lon)
+names(d)[24:25]<- c("lat", "lon")
+write.csv(d, "../data/test.csv")
+```
 

@@ -12,10 +12,16 @@ library(caret)
 library(magrittr)
 require(xgboost)
 library(stringr)
+do.call_rbind_read.csv <- function(path, pattern = "*.csv") {
+  files = list.files(path, pattern, full.names = TRUE)
+  do.call(rbind, lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
+}
+
 ```
 
+
 ```{r}
-rm.var <- c('X',
+rm.var <- c(
             'BOROUGH',
             'NEIGHBORHOOD',
             'BLOCK', 
@@ -23,7 +29,8 @@ rm.var <- c('X',
             'EASE.MENT', 
             'ADDRESS', 
             'APARTMENT.NUMBER',
-            'TOTAL.UNITS'
+            'TOTAL.UNITS', 
+            "SALE.DATE"
             )
 train <- read.csv('../data/train.csv')
 train <- train %>% select(- all_of(rm.var))
@@ -33,44 +40,88 @@ id<-test[ , "INDEX"]
 test <- test %>% select(-X, -INDEX, - all_of(rm.var))
 ```
 
-```{r}
 
-df.train = train %>% 
+
+```{r}
+df.train <- train %>% 
+  filter(!YEAR.BUILT %>% is.na()) %>% 
+           mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                  year_cutoff = as.double(year_cutoff),
+                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+           
+train.num  <- train %>%
+            filter(!YEAR.BUILT %>% is.na()) %>% 
+            select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% 
+                      mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                             year_cutoff = as.double(year_cutoff)) 
+dfact <- train %>%
+            filter(!YEAR.BUILT %>% is.na()) %>% 
+                            select(c(BUILDING.CLASS.CATEGORY, 
+                            TAX.CLASS.AT.PRESENT, 
+                            BUILDING.CLASS.AT.PRESENT, 
+                            BUILDING.CLASS.AT.TIME.OF.SALE, 
+                            TAX.CLASS.AT.TIME.OF.SALE)) %>% 
      mutate(
          BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
          BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
          BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
          TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
-         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
-         SALE.DATE =  as.Date(SALE.DATE))
-levels(df.train$BUILDING.CLASS.CATEGORY) <- c(1, 2, 3, 4, 5)
-df.train %>% names()
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
+
+dummy <- dummyVars(" ~ .", data=dfact)
+newdata <- data.frame(predict(dummy, newdata = dfact))
+train.oh <- bind_cols(newdata, train.num)
+
+names(df.train)
+
 ```
 
 ```{r}
-Numdf<-df.train[1:100, ]
+Numdf<-df.train
 
-for (i in 1:16) {
+for (i in 1:15) {
   Numdf[,i]<-as.double(Numdf[,i])
 }
 
+nrounds = 1800
+xgb_grid = expand.grid(
+  nrounds = nrounds,
+  max_depth = 8,
+  eta = 0.01,
+  gamma =  0.1, 
+  colsample_bytree = 0.4,
+  min_child_weight = 3,
+  subsample = 1 
+  
+)
 
-XGBTune<-train(y=Numdf[,11],
-              x=Numdf[,-11],
+
+
+XGBTune<-train(y=Numdf[,12],
+              x=Numdf[,-12],
               method="xgbTree",
               verbose=FALSE,
-              trControl= trainControl(method="repeatedcv",repeats = 1, number=10 , allowParallel=TRUE))
+              tuneGrid = xgb_grid,
+              trControl= trainControl(method="repeatedcv",repeats = 10, number=10 , allowParallel=TRUE))
+saveRDS(XGBTune, "./xgb/XGBTune.rds")
+
 ```
 
 ## Results for xgb with Zip code
 ```{r}
-xgbtune1 <- readRDS("./xgb/with_zip/xgbtune1.rds")
-xgbtune2 <- readRDS("./xgb/with_zip/xgbtune2.rds")
-xgbtune3 <- readRDS("./xgb/with_zip/xgbtune3.rds")
-xgbtune4 <- readRDS("./xgb/with_zip/xgbtune4.rds")
-xgbtune5 <- readRDS("./xgb/with_zip/xgbtune5.rds")
-xgbtune6 <- readRDS("./xgb/with_zip/xgbtune6.rds")
-xgbtune7 <- readRDS("./xgb/with_zip/xgbtune7.rds")
+res <- do.call_rbind_read.csv(path = "./xgb/with_zip/")
+
+
+res<- bind_rows(xgbtune1$results, xgbtune2$results, xgbtune3$results, xgbtune4$results, xgbtune5$results, xgbtune6$results, xgbtune7$results) 
+write.csv(res, './xgb/with_zip/res.csv')
 ```
 
 ```{r}
@@ -87,30 +138,27 @@ all.RMSE
 
 ```{r}
 df.test <- test %>% 
-  mutate(
-         BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
-         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
-         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
-         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
-         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
-         LAND.SQUARE.FEET = log(as.numeric(as.factor(LAND.SQUARE.FEET))+1), 
-         GROSS.SQUARE.FEET = log(as.numeric(as.factor(GROSS.SQUARE.FEET))+1), 
-         SALE.DATE = SALE.DATE %>% lubridate::mdy())
-levels(df.test$BUILDING.CLASS.CATEGORY) <- c(1, 2, 3, 4, 5)
+           mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                  year_cutoff = as.double(year_cutoff),
+                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
 ```
 
 ```{r}
 Numdf<-df.test
 
-for (i in 1:16) {
+for (i in 1:15) {
   Numdf[,i]<-as.double(Numdf[,i])
 }
 
-pred<-predict(xgbtune5, Numdf) #df.test is the manipulated df of test 
+pred<-predict(XGBTune, Numdf) #df.test is the manipulated df of test 
 pred<-exp(pred)
 solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
-          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "xgbtune.csv"), 
           row.names = FALSE)
 ```
 
