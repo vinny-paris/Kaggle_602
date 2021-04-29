@@ -78,4 +78,4 @@ Original = 0.40474
 
 The 8.5% correction was a last minute thing because we had an extra submission about to expire. Techincally it is not the optimal choice (9% would have been) but it's what I chose when the clock was ticking down.
 
-As a meta thing we can view this as an estimate of a fixed bias in the SEL of the log of y , that is log(infaltion*y + 1) ~ log(inflation) + log(y) for a large enough y.
+As a meta thing we can view this as an estimate of a fixed bias in the SEL of the log of y , that is log((1 + infaltion rate)*y + 1) ~ log(1 + inflation) + log(y) for a large enough y.
