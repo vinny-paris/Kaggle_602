@@ -1,0 +1,124 @@
+---
+title: "cluster"
+author: "Amin Shirazi"
+date: "4/29/2021"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(caret)
+library(magrittr)
+require(xgboost)
+library(stringr)
+do.call_rbind_read.csv <- function(path, pattern = "*.csv") {
+  files = list.files(path, pattern, full.names = TRUE)
+  do.call(rbind, lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
+}
+
+```
+
+
+```{r}
+rm.var <- c(
+            'BOROUGH',
+            'NEIGHBORHOOD',
+            'BLOCK', 
+            'LOT', 
+            'EASE.MENT', 
+            'ADDRESS', 
+            'APARTMENT.NUMBER',
+            'TOTAL.UNITS', 
+            "SALE.DATE"
+            )
+train <- read.csv('../data/train.csv')
+train <- train %>% select(- all_of(rm.var))
+
+test<- read.csv('../data/test.csv')
+id<-test[ , "INDEX"]
+test <- test %>% select(-INDEX, - all_of(rm.var))
+```
+
+
+```{r}
+df.train <- train %>% 
+  filter(!YEAR.BUILT %>% is.na() & !lat %>% is.na()) %>% 
+           mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                  year_cutoff = as.double(year_cutoff),
+                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+```
+
+
+```{r}
+library(cluster)
+library(factoextra)
+train.num <- df.train %>% 
+              select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% mutate_if(is.numeric, scale)
+
+k2 <- kmeans(train.num, centers = 2, nstart = 25)
+fviz_cluster(k2, data = train.num)
+
+df.train$cluster <- k2$cluster
+
+write.csv(df.train, "../data/train_cl.csv")
+```
+
+
+
+```{r}
+df.test <- test %>% 
+           mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
+                  year_cutoff = as.double(year_cutoff),
+                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE),
+                   LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+                   GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)))
+
+test.num <- df.test %>% 
+              select(-c(BUILDING.CLASS.CATEGORY, 
+                      TAX.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.PRESENT, 
+                      BUILDING.CLASS.AT.TIME.OF.SALE, 
+                      TAX.CLASS.AT.TIME.OF.SALE)) %>% mutate_if(is.numeric, scale)
+
+tk2 <- kmeans(test.num, centers = 2, nstart = 25)
+fviz_cluster(tk2, data = test.num)
+
+df.test$cluster <- tk2$cluster
+write.csv(df.test, "../data/test_cl.csv")
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

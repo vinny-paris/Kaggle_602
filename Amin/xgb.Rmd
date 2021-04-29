@@ -37,7 +37,7 @@ train <- train %>% select(- all_of(rm.var))
 
 test<- read.csv('../data/test.csv')
 id<-test[ , "INDEX"]
-test <- test %>% select(-X, -INDEX, - all_of(rm.var))
+test <- test %>% select(-INDEX, - all_of(rm.var))
 ```
 
 
@@ -122,6 +122,12 @@ res <- do.call_rbind_read.csv(path = "./xgb/with_zip/")
 
 res<- bind_rows(xgbtune1$results, xgbtune2$results, xgbtune3$results, xgbtune4$results, xgbtune5$results, xgbtune6$results, xgbtune7$results) 
 write.csv(res, './xgb/with_zip/res.csv')
+a = res %>% arrange(desc(-RMSE)) %>% filter(RMSE < 0.378) %>%
+  select(eta, max_depth, gamma, colsample_bytree, min_child_weight, subsample, nrounds) %>% 
+  apply(2, unique) 
+
+a$nrounds %>% sort()
+xgb_grid
 ```
 
 ```{r}
@@ -144,7 +150,10 @@ df.test <- test %>%
                    BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
                    BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
                    TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
-                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE),
+                   LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+                  GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)))
+Numdf%>% is.na() %>% sum()
 ```
 
 ```{r}
@@ -153,12 +162,12 @@ Numdf<-df.test
 for (i in 1:15) {
   Numdf[,i]<-as.double(Numdf[,i])
 }
-
+XGBTune <- readRDS("./xgb/xgbtune.rds")
 pred<-predict(XGBTune, Numdf) #df.test is the manipulated df of test 
 pred<-exp(pred)
 solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
-          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "xgbtune.csv"), 
+          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "xgbtune_new_lat_lon.csv"), 
           row.names = FALSE)
 ```
 

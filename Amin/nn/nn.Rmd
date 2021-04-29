@@ -34,7 +34,7 @@ train <- train %>% select(- all_of(rm.var))
 
 test<- read.csv('../../data/test.csv')
 id<-test[ , "INDEX"]
-test <- test %>% select(-X, -INDEX, - all_of(rm.var))
+test <- test %>% select(-INDEX, - all_of(rm.var))
 ```
 
 
@@ -80,7 +80,7 @@ train.oh <- bind_cols(newdata, train.num)
 # trsf <- data.frame(predict(dmy, newdata = data.frame(fact)))
 # trsf<- trsf %>% normalize()
 # train.oh<-bind_cols(trsf, dminmax)
-names(train.oh)
+
 
 ```
 

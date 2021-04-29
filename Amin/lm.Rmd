@@ -22,12 +22,16 @@ df.test <- test %>% select(- c(BOROUGH, NEIGHBORHOOD,  BLOCK, LOT, EASE.MENT, AD
 
 ## Training data
 ```{r}
-train<- read.csv('../data/train.csv') %>% select(- X)
-test <- read.csv('../data/Queens Test Set.csv') %>% select(- X, -X.1)
+train<- read.csv('../data/train.csv') 
+test <- read.csv('../data/Queens Test Set.csv') %>% select( -X.1)
 id<-test[ , "INDEX"]
 test<- test %>% select(-INDEX)
 names(train)
+dim(train)
 ```
+
+
+
 
 
 ```{r}

@@ -41,9 +41,15 @@ test <- read.csv('../data/test.csv')
 
 
 ```{r}
-get_local_spot <-  get_map("Queens", maptype = "roadmap", zoom = 10) 
+get_local_spot <-  get_map("Queens", maptype = "terrain", zoom = 11) 
+
 ggmap(get_local_spot) + 
-   geom_point(data = train, aes(x = lon, y = lat), color = "navy", size = 1) 
+   geom_point(data = train, aes(x = lon, y = lat), color = "navy", size = 1) +
+  ggtitle(label = "", subtitle = "Map of real estates in train data by zipcode")
+
+
+ggmap(get_local_spot, extent = "device") + 
+  stat_summary_2d(data = train, aes(x = lon, y = lat, z = SALE.PRICE), fun = mean, alpha = 0.6, bins = 30) + scale_fill_gradient(name = "Log Price", low = "green", high = "red")
 ```
 
 
@@ -71,7 +77,9 @@ ggmap(get_local_spot) +
 
 ```{r}
 ggmap(get_local_spot) + 
-   geom_point(data = test, aes(x = lon, y = lat), color = "navy", size = 1) 
+   geom_point(data = test, aes(x = lon, y = lat), color = "navy", size = 1) +
+  ggtitle(label = "", subtitle = "Map of real estates in test data by zipcode")
+
 ```
 
 ```{r}
