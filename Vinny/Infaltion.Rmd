@@ -53,22 +53,29 @@ my_infl
 my_infl2
 ```
 
-32% seems unreasonable to me as having been an econ major in undergrad (abondon any investments you have and buy NYC real estate immediately if this was true). 12% is a lot for a single year but more reasonable. So using a D-optimal design for a second order polynomial model over the experimental region [0, .12] we had No Correction, 6% Correction, and 12% correction with a caveat. This was orginally to correct for KNN not being able to train/predict with missing values while still producing the strongest cv when trained without sale date on the whole data than when trained on the complete subset with sales date included. 
+32% seems unreasonable to me as having been an econ major in undergrad (abondon any investments you have and buy NYC real estate immediately if this was true). 12% is a lot for a single year but more reasonable. So using a design for a first order model over the experimental region [0, .12] we had No Correction Except for KNN, 6% Correction for all observations, and a 12% correction for all observations. This was originally to correct for KNN not being able to train/predict with missing values of Sales Date while still producing the strongest cv when trained without sale date on the whole data than when trained on the complete subset with sales date included. 
 
-As such there was an orginally planned fourth run where only the knn were corrected for inflation while the remaining cases (estimated via a gbm that could make predictions based on incomplete cases) were left unscaled. 
-
-
-Results were 
-0% = 0.65671
-6% partial = 0.56731
-6% full = 0.48533
-12% full = 0.51551
+As such there was a partition in the first run where only some data was scaled for inflation (those without sales date data). 
 
 
-Applied to Subrata's Random Forest estimate we got
+Results were \n
+
+6% partial = 0.56731 \n
+
+6% full = 0.48533 \n
+
+12% full = 0.51551 \n
+
+
+
+Applied to Subrata's Random Forest estimates (best  we had availiable at the time) we got
+
 Original = 0.40474
+
 6%       = 0.38968
+
 8.5%     = 0.38597
+
 The 8.5% correction was a last minute thing because we had an extra submission about to expire. Techincally it is not the optimal choice (9% would have been) but it's what I chose when the clock was ticking down.
 
 As a meta thing we can view this as an estimate of a fixed bias in the SEL of the log of y , that is log(infaltion*y + 1) ~ log(inflation) + log(y) for a large enough y.
