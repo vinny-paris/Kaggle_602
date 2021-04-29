@@ -1,0 +1,81 @@
+---
+title: "Inflation"
+author: "Vinny Paris"
+date: "4/29/2021"
+output: html_document
+---
+The data was for the years 1990 - 2015 for a single family home in Queens County NY as supplied by the Federal Reserve Bank of New York.
+```{r}
+infl <- read.csv('../data/inflation.csv')
+colnames(infl) <- c("X", "Date", "val")
+infl$val <- as.numeric(infl$val)
+infl$X <- as.numeric(infl$X)
+plot(infl$X, infl$val, ylab = 'Nominal Price')
+
+#Well, log did not do much lol
+plot(infl$X, log(infl$val), xlim = c(0, 17), ylab = 'Log of Nominal Price')
+
+
+#So as x increases the value increases at an increasing rate. Sounds like a Gamma to me, as alpha grows the expectations grows squaredly so...
+
+
+infl_mod <- glm(val ~ X, data = infl, family = 'Gamma')
+infl_pred <- predict(infl_mod, data.frame(X = 1:17),
+                     type = 'response')
+
+plot(infl$X, infl$val, xlim = c(0, 17),
+     ylim = c(50, 250), pch = 15, ylab = 'Nominal Price')
+
+#Gamma in Green
+points(1:17, infl_pred, col = 'green', pch = 16)
+
+
+#Inverse Gaussian In Blue
+infl_mod2 <- glm(val ~ X, data = infl, family = 'inverse.gaussian')
+infl_pred2 <- predict(infl_mod2, data.frame(X = 1:17),
+                     type = 'response')
+points(1:17, infl_pred2, col = 'purple', pch = 17)
+
+#Remember when you look at these graphs we are mostly
+#interested in the ratio from one year to the next
+```
+
+So I'm still undershooting near the tail end but the inverse gaussian looks solid-ish and the gamma is fair so...
+```{r}
+my_infl2 <- infl_pred2[17]/infl_pred2[16]
+
+my_infl <- infl_pred[17]/infl_pred[16]
+
+#Infaltion prediction from gamma
+my_infl
+
+#Infaltion prediction from the inverse gaussian
+my_infl2
+```
+
+32% seems unreasonable to me as having been an econ major in undergrad (abondon any investments you have and buy NYC real estate immediately if this was true). 12% is a lot for a single year but more reasonable. So using a design for a first order model over the experimental region [0, .12] we had No Correction Except for KNN, 6% Correction for all observations, and a 12% correction for all observations. This was originally to correct for KNN not being able to train/predict with missing values of Sales Date while still producing the strongest cv when trained without sale date on the whole data than when trained on the complete subset with sales date included. 
+
+As such there was a partition in the first run where only some data was scaled for inflation (those without sales date data). 
+
+
+Results were \n
+
+6% partial = 0.56731 \n
+
+6% full = 0.48533 \n
+
+12% full = 0.51551 \n
+
+
+
+Applied to Subrata's Random Forest estimates (best  we had availiable at the time) we got
+
+Original = 0.40474
+
+6%       = 0.38968
+
+8.5%     = 0.38597
+
+The 8.5% correction was a last minute thing because we had an extra submission about to expire. Techincally it is not the optimal choice (9% would have been) but it's what I chose when the clock was ticking down.
+
+As a meta thing we can view this as an estimate of a fixed bias in the SEL of the log of y , that is log((1 + infaltion rate)*y + 1) ~ log(1 + inflation) + log(y) for a large enough y.
