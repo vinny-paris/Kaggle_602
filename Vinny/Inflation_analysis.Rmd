@@ -1,0 +1,31 @@
+---
+title: "infl_analysis"
+author: "Vinny Paris"
+date: "5/1/2021"
+output: html_document
+---
+
+I'm unsure what is happening but it appears that ~8 (6-10 anyway) is a safe inflation scaling factor. There is the "partial" knn and gbm model where only the knn values were corrected for inflation. The score was 0.56731. I was unsure how to represent it on the graph.
+```{r, echo = FALSE}
+
+infl_data <- data.frame(matrix(c('knn',   6, 0.48533,
+                      'knn',  12, 0.51551,
+                      'ran_for',   0, 0.40474,
+                      'ran_for',   6, 0.38968,
+                      'ran_for', 8.5, 0.38597,
+                      'ran_for',  10, 0.38442,
+                      'ran_for',  11, 0.38367), byrow = TRUE, nrow = 7))
+colnames(infl_data) <- c('model', 'rate', 'score')
+infl_data$rate <- as.numeric(infl_data$rate)
+
+infl_data
+
+plot(infl_data$rate, infl_data$score, col = c(4,4,2,2,2,2,2),
+     pch = c(15,15, rep(16,5)), main = 'Scaling Factor vs Score',
+     sub = 'Blue is knn/gmb, Red is random forest', xlab = 'Percent scaled',
+     ylab = 'Score')
+```
+
+We don't know an honest to goodness estiamte of variance without replication. Trying to fit a model to 7 data points with at least three parameters is pretty rough, especially when it looks like there is a nice polynomial of some form for the random forest estimates. If we do an interaction model all intercepts/slopes are sig. with a standard error .0018 on 3 df. But that is also 4 parameters on 7 data points hahahahaaha 
+
+Anyway, I'm open to suggestions
