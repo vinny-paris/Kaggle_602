@@ -29,12 +29,13 @@ rm.var <- c(
             'TOTAL.UNITS', 
             "SALE.DATE"
             )
-train <- read.csv('../../data/train.csv')
-train <- train %>% select(- all_of(rm.var))
+train <- read.csv('../../data/train_cl.csv')
+#train <- train %>% select(- all_of(rm.var))
 
-test<- read.csv('../../data/test.csv')
-id<-test[ , "INDEX"]
-test <- test %>% select(-INDEX, - all_of(rm.var))
+test<- read.csv('../../data/test_cl.csv')
+#id<-test[ , "INDEX"]
+#test <- test %>% select(-INDEX, - all_of(rm.var))
+
 ```
 
 
@@ -428,19 +429,20 @@ write.csv(solution,
 
 ## Borouta
 ```{r}
-dtrain  <- train %>%
-            filter(!YEAR.BUILT %>% is.na()) %>% 
-            mutate(YEAR.BUILT = as.double(YEAR.BUILT), 
-                   year_cutoff = as.double(year_cutoff), 
-                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
-                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
-                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
-                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
-                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+boruta.train <- Boruta(SALE.PRICE~., data = train, doTrace = 2)
+```
 
 
-boruta.train <- Boruta(SALE.PRICE~., data = dtrain, doTrace = 2)
-plot(boruta.train)
+```{r}
+pdf("boruta.pdf") 
+plot(boruta.train, xlab = "", xaxt = "n") 
+lz<-lapply(1:ncol(boruta.train$ImpHistory),
+           function(i)  boruta.train$ImpHistory[is.finite(boruta.train$ImpHistory[,i]),i])
+
+names(lz) <- colnames(boruta.train$ImpHistory)
+Labels <- sort(sapply(lz,median))
+axis(side = 1,las=2,labels = names(Labels), at = 1:ncol(boruta.train$ImpHistory), cex.axis = 0.8)
+dev.off()
 ```
 
 

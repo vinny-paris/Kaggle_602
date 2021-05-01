@@ -120,7 +120,6 @@ saveRDS(XGBTune, "./xgb/XGBTune.rds")
 res <- do.call_rbind_read.csv(path = "./xgb/with_zip/")
 
 
-res<- bind_rows(xgbtune1$results, xgbtune2$results, xgbtune3$results, xgbtune4$results, xgbtune5$results, xgbtune6$results, xgbtune7$results) 
 write.csv(res, './xgb/with_zip/res.csv')
 a = res %>% arrange(desc(-RMSE)) %>% filter(RMSE < 0.378) %>%
   select(eta, max_depth, gamma, colsample_bytree, min_child_weight, subsample, nrounds) %>% 
@@ -131,15 +130,32 @@ xgb_grid
 ```
 
 ```{r}
+xgbtune2 <- readRDS("./xgb/with_zip/xgbtune2.rds")
+xgbtune3 <- readRDS("./xgb/with_zip/xgbtune3.rds")
+xgbtune4 <- readRDS("./xgb/with_zip/xgbtune4.rds")
+xgbtune5 <- readRDS("./xgb/with_zip/xgbtune5.rds")
+xgbtune6 <- readRDS("./xgb/with_zip/xgbtune6.rds")
+xgbtune7 <- readRDS("./xgb/with_zip/xgbtune7.rds")
+xgbtune8 <- readRDS("./xgb/with_zip/xgbtune8.rds")
+xgbtune9 <- readRDS("./xgb/with_zip/xgbtune9.rds")
+xgbtune10 <- readRDS("./xgb/with_zip/xgbtune10.rds")
+xgbtune11 <- readRDS("./xgb/with_zip/xgbtune11.rds")
+xgbtune12 <- readRDS("./xgb/with_zip/xgbtune12.rds")
+xgbtune13 <- readRDS("./xgb/with_zip/xgbtune13.rds")
+
+
+
 grab_rmse<-function(tune){
   index<-which.min(tune$results$RMSE)
   tune$results[index,]$RMSE
 }
 
-xgbtune7$bestTune
-all.tunes<-list(xgbtune1, xgbtune2, xgbtune3, xgbtune4, xgbtune5)
+all.tunes<-list(xgbtune2, xgbtune3, xgbtune4, xgbtune5, 
+                xgbtune6, xgbtune7, xgbtune8, xgbtune9, xgbtune10, 
+                xgbtune11, xgbtune12, xgbtune13)
 all.RMSE<-lapply(all.tunes, grab_rmse)
 all.RMSE
+xgbtune2$bestTune
 ```
 
 ```{r}
@@ -152,8 +168,8 @@ df.test <- test %>%
                    TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
                    TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE),
                    LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
-                  GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)))
-Numdf%>% is.na() %>% sum()
+                   GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)))
+
 ```
 
 ```{r}
@@ -162,12 +178,11 @@ Numdf<-df.test
 for (i in 1:15) {
   Numdf[,i]<-as.double(Numdf[,i])
 }
-XGBTune <- readRDS("./xgb/xgbtune.rds")
-pred<-predict(XGBTune, Numdf) #df.test is the manipulated df of test 
-pred<-exp(pred)
+pred<-predict(xgbtune2, Numdf) #df.test is the manipulated df of test 
+pred<-(exp(pred) -1 )*1.085
 solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
-          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "xgbtune_new_lat_lon.csv"), 
+          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "xgbtune2.csv"), 
           row.names = FALSE)
 ```
 
