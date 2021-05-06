@@ -1,16 +1,3 @@
----
-title: "Models"
-author: "Subrata Pal"
-date: "4/15/2021"
-output: html_document
----
-
-
-
-## Preprocessing etc:
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 library(dplyr)
 library(ggplot2)
 library(caret)
@@ -73,90 +60,67 @@ colSums(is.na(df.train))
 df.train.no.NA <- df.train %>% select(-c("YEAR.BUILT",
                                          "year_cutoff"))
 
-```
 
 
 
-## Model fitting:
 
-### Settings: 
-```{r}
+
+
+
 ctrl <- trainControl(method="LOOCV", savePredictions='final')
 ctrl_2 <- trainControl(method="cv", number=3, savePredictions='final')
 ctrl_3 <- trainControl(method="repeatedcv", number=6, repeats = 5, 
                        savePredictions='final')
 
+#ctrl_3 <- ctrl_2						## COMMENT IT
+
 library(doParallel)
-cl <- makeForkCluster(15)
+cl <- makeForkCluster(16)
 registerDoParallel(cl)
 
-```
 
 
-### 
-```{r}
+
+
 
 ## See these models also
-# gaussprRadial, gam, gamLoess, gamSpline 
-# gamboost, glmboost, BstLm
-
+# gaussprRadial, gam, gamLoess, gamSpline -- for base
+# gamboost, glmboost, BstLm  -- for ensemble
 
 models_used <- list(gbm = caretModelSpec(method="gbm", tuneGrid=expand.grid(n.trees=(1:8)*100, interaction.depth=1:5, shrinkage=0.075, n.minobsinnode=10)),
                    svmRadial  = caretModelSpec(method="svmRadial"),
-                   ranger = caretModelSpec(method="ranger", tuneGrid=expand.grid(mtry=c(2, 5), splitrule=c("variance", "extratrees"), min.node.size=5) ),
+                   ranger = caretModelSpec(method="ranger", tuneGrid=expand.grid(mtry=c(12, 32, 42, 52, 62, 102), splitrule=c("variance", "extratrees"), min.node.size=5) ),
                    earth = caretModelSpec(method="earth", tuneGrid=expand.grid(nprune=c(2, 11, 20, 30, 40, 50))),
-                   rpart = caretModelSpec(method="rpart", tuneGrid=expand.grid(cp=c(3e-5, 1e-4, 3e-4, 1e-3, 0.0034, 0.0103, 0.03082, 0.1099, 0.2125))),
-                   knn = caretModelSpec(method="knn", tuneGrid=expand.grid(k=(1:10)*3)),
-                   nnet = caretModelSpec(method="nnet")
+                   rpart = caretModelSpec(method="rpart", tuneGrid=expand.grid(cp=c(3e-5, 1e-4, 3e-4, 1e-3, 0.0034, 0.0103, 0.03082, 0.1099, 0.2125)))
+                   #knn = caretModelSpec(method="knn", tuneGrid=expand.grid(k=(2:10)*3)),
+                   #nnet = caretModelSpec(method="nnet")
 )
+
+
+
+
 
 
 models <- caretList(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
                     preProc=c("center", "scale"), tuneList = models_used,
                     na.action='na.pass')
 
-
+saveRDS(models, "models_par_3.rds")
 
 stack.glm <- caretStack(models, method="glm", metric="ROC",
                         preProc=c("center", "scale"),
                         trControl=traincontrol_used )
+saveRDS(stack.glm, "stack.glm_par_3.rds")
 stack.rf <- caretStack(models, method="rf", metric="ROC",
                        preProc=c("center", "scale"),
                        trControl=traincontrol_used )
+saveRDS(stack.rf, "stack.rf_par_3.rds")
 
 
+models
 
-
-```
-
-
-
-### Predict:
-```{r}
-
-
-(class_gbm_1 <- readRDS("gbm_class.rds"))  # 0.37893
-(class_gbm_2 <- readRDS("gbm_class_no_NA.rds")) # 0.3857594
-(class_rpart_1 <- readRDS("rpart_class.rds"))  ##  not very good, reduce cp and see
-(class_rpart_2 <- readRDS("rpart_class_no_NA.rds")) ##  not very good, reduce cp and see
-(class_ranger_2 <- readRDS("ranger_class_no_NA.rds"))  ## not bad # 0.3857598
-(class_pls_2 <- readRDS("pls_class_no_NA.rds")) # clearly bad
-(class_pcr_2 <- readRDS("pcr_class_no_NA.rds")) # clearly bad
-(class_earth_2 <- readRDS("earth_class_no_NA.rds")) # not bad, increase nprune 
-# 0.3966643
-(class_cubist_2 <- readRDS("cubist_class_no_NA.rds"))
-
-(class_svm_1 <- readRDS("svm_class.rds")) # 0.4654915, increase C?
-
-
-
-
-Predicted_all <- predict(models, df.test)
-Predicted_stack_glm <- predict(stack.glm, df.test)
-Predicted_stack_rf <- predict(stack.rf, df.test)
-
-
-
+stack.glm
+stack.rf
 
 
 
@@ -164,21 +128,33 @@ Predicted_stack_rf <- predict(stack.rf, df.test)
 
 setwd("..")
 
-pred<- predict(class_gbm_1, df.test) #df.test is the manipulated df of test 
+pred_all<- predict(models, df.test)
+pred_all <- exp(pred)-1
+cor(models)
+
+
+
+pred<- predict(stack.glm, df.test)
 pred<- exp(pred)-1
 solution <- data.frame("INDEX"=id,"PRICE"= pred)
+(file_name <- paste0("./submission/solution",
+                 format(Sys.time(), "%d-%b-%Y %H.%M"), "_stack_glm.csv"))
+
 write.csv(solution, 
-          paste0("./submission/solution", 
-                 format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          file_name, 
           row.names = FALSE)
 
 
-pred<- predict(class_rpart, df.test) #df.test is the manipulated df of test 
-pred<- exp(pred)
+
+
+pred<- predict(stack.rf, df.test)
+pred<- exp(pred)-1
 solution <- data.frame("INDEX"=id,"PRICE"= pred)
-write.csv(solution, 
-          paste0("./submission/solution", 
-                 format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+(file_name <- paste0("./submission/solution",
+                 format(Sys.time(), "%d-%b-%Y %H.%M"), "_stack_rf.csv"))
+
+write.csv(solution,
+          file_name,
           row.names = FALSE)
-```
+
 
