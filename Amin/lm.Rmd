@@ -13,10 +13,24 @@ library(caret)
 
 ```
 
-
 ```{r}
-df.train <- train %>% select(- c(BOROUGH, NEIGHBORHOOD, BLOCK, LOT, EASE.MENT, ADDRESS, APARTMENT.NUMBER, SALE.DATE, TOTAL.UNITS, BUILDING.CLASS.AT.PRESENT, BUILDING.CLASS.CATEGORY, BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.PRESENT, TAX.CLASS.AT.TIME.OF.SALE)) 
-df.test <- test %>% select(- c(BOROUGH, NEIGHBORHOOD,  BLOCK, LOT, EASE.MENT, ADDRESS, APARTMENT.NUMBER, SALE.DATE, TOTAL.UNITS, BUILDING.CLASS.AT.PRESENT, BUILDING.CLASS.CATEGORY, BUILDING.CLASS.AT.TIME.OF.SALE, TAX.CLASS.AT.PRESENT, TAX.CLASS.AT.TIME.OF.SALE))
+rm.var <- c(
+            'BOROUGH',
+            'NEIGHBORHOOD',
+            'BLOCK', 
+            'LOT', 
+            'EASE.MENT', 
+            'ADDRESS', 
+            'APARTMENT.NUMBER', 
+            'year_cutoff', 
+            'res_units_cutoff'
+            )
+train <- read.csv('../data/Queens Training Set.csv') %>% select(-X)
+train <- train %>% select(- all_of(rm.var))
+test<- read.csv('../data/Queens Test Set.csv')
+id<-test[ , "INDEX"]
+
+test <- test %>% select(-INDEX, -X.1, -X, - all_of(rm.var))
 ```
 
 
@@ -33,41 +47,27 @@ dim(train)
 
 
 
-
-```{r}
-rm.var <- c('BOROUGH',
-            'NEIGHBORHOOD',
-            'BLOCK', 
-            'LOT', 
-            'EASE.MENT', 
-            'ADDRESS', 
-            'APARTMENT.NUMBER',
-            'TOTAL.UNITS'
-            )
-
-df.train <- train %>% select(- c(rm.var) )
-df.test <- test %>% select(- c(rm.var))
-```
-
-
-
 ## Data manipulation
 For now, I did not make any changes on the factor variables, just keep them as they are
 ```{r}
+df.train <- train
 d <- df.train %>%
    mutate(
          BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
          BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
          BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
          TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
-         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE))
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
+         SALE.DATE = lubridate::date(SALE.DATE))
 
 d<- d %>% select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
                   -BUILDING.CLASS.CATEGORY, 
-                  -SALE.DATE)
+                 - BUILDING.CLASS.AT.TIME.OF.SALE, 
+                 - TAX.CLASS.AT.PRESENT)
+d %>% summary()
 
 d<-d[-which(d$YEAR.BUILT %>% is.na()), ]
-names(d)
+
 ```
 
 ```{r, eval=FALSE}
@@ -100,25 +100,21 @@ summary(lmtune)
 
 ## Manipulation on test set
 ```{r}
-dtest<- df.test %>%
-  mutate(
-    BUILDING.CLASS.CATEGORY = str_trim(BUILDING.CLASS.CATEGORY, 'both'), 
-    BUILDING.CLASS.AT.PRESENT = str_trim(BUILDING.CLASS.AT.PRESENT, 'both'), 
-    BUILDING.CLASS.AT.TIME.OF.SALE = str_trim(BUILDING.CLASS.AT.TIME.OF.SALE, 'both'), 
-    TAX.CLASS.AT.PRESENT = str_trim(TAX.CLASS.AT.PRESENT, 'both'), 
-    TAX.CLASS.AT.TIME.OF.SALE = str_trim(TAX.CLASS.AT.TIME.OF.SALE, 'both'), 
-    SALE.DATE = str_trim(SALE.DATE, 'both')) %>% 
-  mutate(
+dtest<- test %>%
+   mutate(
          BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
          BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
          BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
          TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
          TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
-         LAND.SQUARE.FEET = log(as.numeric(as.factor(LAND.SQUARE.FEET))+1), 
-         GROSS.SQUARE.FEET = log(as.numeric(as.factor(GROSS.SQUARE.FEET))+1)) %>% 
-  select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
-                  -BUILDING.CLASS.CATEGORY,  
-         -SALE.DATE)
+         SALE.DATE = lubridate::mdy(SALE.DATE), 
+         LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+         GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)))
+
+dt<- dtest %>% select(- BUILDING.CLASS.AT.PRESENT, - TAX.CLASS.AT.TIME.OF.SALE, 
+                  -BUILDING.CLASS.CATEGORY, 
+                 - BUILDING.CLASS.AT.TIME.OF.SALE, 
+                 - TAX.CLASS.AT.PRESENT)
 
 ```
 
@@ -141,11 +137,11 @@ names(train.oh)
 ## Submission file
 ```{r}
 #Predict on test
-pred<-predict(lmtune, dtest)
-pred<-exp(pred)
+pred<-predict(lmtune, dt)
+pred<-exp(pred) - 1
 solution<-data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
-          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          paste0("../submission/solution", format(Sys.time(), "%d-%b-%Y %H.%M"), "lmraw.csv"), 
           row.names = FALSE)
 ```
 
