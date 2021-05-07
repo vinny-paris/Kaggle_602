@@ -1,0 +1,88 @@
+---
+title: "report"
+author: "Amin Shirazi"
+date: "5/4/2021"
+output: pdf_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, error = FALSE, message = FALSE,fig.width=4,fig.height=4)
+require(dplyr)
+require(ggplot2)
+library(knitr)
+library(kableExtra)
+library(ggcorrplot)
+queen.train<- read.csv('./data/Queens Training Set.csv') 
+train <- read.csv('./data/train.csv')
+test <- read.csv('./data/test.csv') 
+dim(train)
+names(train)
+
+rm.var <- c(
+            'BOROUGH',
+            'NEIGHBORHOOD',
+            'BLOCK', 
+            'LOT', 
+            'EASE.MENT', 
+            'ADDRESS', 
+            'APARTMENT.NUMBER', 
+            'year_cutoff', 
+            'lat', 
+            'lon'
+            )
+
+train.data<- train %>% select(- c(rm.var))
+
+
+queen.train %>% filter(BUILDING.CLASS.AT.TIME.OF.SALE %>% is.na())
+train %>% filter(BUILDING.CLASS.AT.PRESENT %>% is.na())
+```
+
+
+```{r corplot, ref.label= 'corplot' ,fig.width=7,fig.height=6, fig.cap= 'Correlation matrix of the Queens County House Price data'}
+
+tr.data<- train.data %>% select(-SALE.DATE, -YEAR.BUILT) %>% 
+             mutate(
+                   BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+                   BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+                   BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+                   TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+                   TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE)) 
+
+tr.data %>% summary()
+
+
+corr2<-Hmisc::rcorr(as.matrix(tr.data))
+
+corplot = ggcorrplot(
+  corr2$r,
+  lab_size = 4.5,
+  p.mat = NULL,
+  insig = c("pch", "blank"),
+  pch = 1,
+  pch.col = "black",
+  pch.cex = 1,
+  tl.cex = 14
+) + coord_fixed() +
+  scale_fill_gradient2(
+    low = "#6D9EC1",
+    mid = "white",
+    high = "#E46726",
+    midpoint = 0,
+    limit = c(-1, 1) ,
+    name = "" ,
+    space = "Lab"
+  ) +
+  theme(
+    axis.text.x = element_text(margin = margin(-2, 0, 0, 0), size = 8),
+    axis.text.y = element_text(margin = margin(0, -2, 0, 0), size = 8),
+    panel.grid.minor = element_line(size = 10)
+  ) +
+  geom_tile(fill = "white") +
+  geom_tile(height = 0.8, width = 0.8) +
+  theme(plot.title = element_text(hjust = 0.5, size = 10),
+        legend.position = "bottom")
+corplot
+ggsave("corr.mat.pdf", width = 7, height = 6)
+```
