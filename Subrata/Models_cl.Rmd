@@ -1,0 +1,184 @@
+---
+title: "Models"
+author: "Subrata Pal"
+date: "4/15/2021"
+output: html_document
+---
+
+
+
+## Preprocessing etc:
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(caretEnsemble)
+library(stringr)
+
+rm(list=ls())
+
+traindat <- read.csv("../data/train_cl.csv")
+testdat <- read.csv("../data/test_cl.csv")
+
+
+
+traindat <- traindat %>% 
+ mutate(BUILDING.CLASS.CATEGORY = as.factor(BUILDING.CLASS.CATEGORY),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(BUILDING.CLASS.AT.TIME.OF.SALE), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
+         LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+         GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET)),
+         BUILDING.CLASS.AT.TIME.OF.SALE = stringr::str_trim(BUILDING.CLASS.AT.TIME.OF.SALE)
+        ) 
+
+
+
+
+testdat <- testdat %>% 
+ mutate(BUILDING.CLASS.CATEGORY = as.factor(str_trim(BUILDING.CLASS.CATEGORY)),
+         BUILDING.CLASS.AT.PRESENT = as.factor(BUILDING.CLASS.AT.PRESENT),
+         BUILDING.CLASS.AT.TIME.OF.SALE = as.factor(str_trim(BUILDING.CLASS.AT.TIME.OF.SALE)), 
+         TAX.CLASS.AT.PRESENT = as.factor(TAX.CLASS.AT.PRESENT), 
+         TAX.CLASS.AT.TIME.OF.SALE = as.factor(TAX.CLASS.AT.TIME.OF.SALE), 
+         LAND.SQUARE.FEET = as.numeric(as.factor(LAND.SQUARE.FEET)), 
+         GROSS.SQUARE.FEET = as.numeric(as.factor(GROSS.SQUARE.FEET))
+        ) 
+
+
+
+
+
+str(traindat)
+str(testdat)
+
+id <- testdat$INDEX
+
+rm.var <- c()
+## NBD, BUILDING.CLASS.CATEGORY has a new level in test data
+
+df.train <- traindat %>% select(-all_of(rm.var) )
+df.test <- testdat %>% select(-all_of(rm.var))
+
+colSums(is.na(df.train))
+
+# df.train.no.NA <- df.train %>% select(-c("TAX.CLASS.AT.PRESENT",
+#                                    "BUILDING.CLASS.AT.PRESENT",
+#                                    "YEAR.BUILT",
+#                                    "year_cutoff"))
+
+df.train.no.NA <- df.train %>% select(-c("YEAR.BUILT",
+                                         "year_cutoff"))
+
+```
+
+
+
+## Model fitting:
+
+### Settings: 
+```{r}
+ctrl <- trainControl(method="LOOCV", savePredictions='final')
+ctrl_2 <- trainControl(method="cv", number=3, savePredictions='final')
+ctrl_3 <- trainControl(method="repeatedcv", number=6, repeats = 5, 
+                       savePredictions='final')
+
+library(doParallel)
+cl <- makeForkCluster(15)
+registerDoParallel(cl)
+
+```
+
+
+### 
+```{r}
+
+## See these models also
+# gaussprRadial, gam, gamLoess, gamSpline 
+# gamboost, glmboost, BstLm
+
+
+models_used <- list(gbm = caretModelSpec(method="gbm", tuneGrid=expand.grid(n.trees=(1:8)*100, interaction.depth=1:5, shrinkage=0.075, n.minobsinnode=10)),
+                   svmRadial  = caretModelSpec(method="svmRadial"),
+                   ranger = caretModelSpec(method="ranger", tuneGrid=expand.grid(mtry=c(2, 5), splitrule=c("variance", "extratrees"), min.node.size=5) ),
+                   earth = caretModelSpec(method="earth", tuneGrid=expand.grid(nprune=c(2, 11, 20, 30, 40, 50))),
+                   rpart = caretModelSpec(method="rpart", tuneGrid=expand.grid(cp=c(3e-5, 1e-4, 3e-4, 1e-3, 0.0034, 0.0103, 0.03082, 0.1099, 0.2125))),
+                   knn = caretModelSpec(method="knn", tuneGrid=expand.grid(k=(1:10)*3)),
+                   nnet = caretModelSpec(method="nnet")
+)
+
+
+models <- caretList(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
+                    preProc=c("center", "scale"), tuneList = models_used,
+                    na.action='na.pass')
+
+
+
+stack.glm <- caretStack(models, method="glm", metric="ROC",
+                        preProc=c("center", "scale"),
+                        trControl=traincontrol_used )
+stack.rf <- caretStack(models, method="rf", metric="ROC",
+                       preProc=c("center", "scale"),
+                       trControl=traincontrol_used )
+
+
+
+
+```
+
+
+
+### Predict:
+```{r}
+
+
+(class_gbm_1 <- readRDS("gbm_class.rds"))  # 0.37893
+(class_gbm_2 <- readRDS("gbm_class_no_NA.rds")) # 0.3857594
+(class_rpart_1 <- readRDS("rpart_class.rds"))  ##  not very good, reduce cp and see
+(class_rpart_2 <- readRDS("rpart_class_no_NA.rds")) ##  not very good, reduce cp and see
+(class_ranger_2 <- readRDS("ranger_class_no_NA.rds"))  ## not bad # 0.3857598
+(class_pls_2 <- readRDS("pls_class_no_NA.rds")) # clearly bad
+(class_pcr_2 <- readRDS("pcr_class_no_NA.rds")) # clearly bad
+(class_earth_2 <- readRDS("earth_class_no_NA.rds")) # not bad, increase nprune 
+# 0.3966643
+(class_cubist_2 <- readRDS("cubist_class_no_NA.rds"))
+
+(class_svm_1 <- readRDS("svm_class.rds")) # 0.4654915, increase C?
+
+
+
+
+Predicted_all <- predict(models, df.test)
+Predicted_stack_glm <- predict(stack.glm, df.test)
+Predicted_stack_rf <- predict(stack.rf, df.test)
+
+
+
+
+
+
+
+
+setwd("..")
+
+pred<- predict(class_gbm_1, df.test) #df.test is the manipulated df of test 
+pred<- exp(pred)-1
+solution <- data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("./submission/solution", 
+                 format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          row.names = FALSE)
+
+
+pred<- predict(class_rpart, df.test) #df.test is the manipulated df of test 
+pred<- exp(pred)
+solution <- data.frame("INDEX"=id,"PRICE"= pred)
+write.csv(solution, 
+          paste0("./submission/solution", 
+                 format(Sys.time(), "%d-%b-%Y %H.%M"), ".csv"), 
+          row.names = FALSE)
+```
+

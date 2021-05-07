@@ -131,7 +131,7 @@ saveRDS(class_rpart_1, "rpart_class.rds")
 
 
 class_rpart_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
-                   preProcess = c("center","scale"), method = "rpart")
+                   preProcess = c("center","scale"), method = "rpart", tuneGrid = expand.grid(cp=c(3e-5, 1e-4, 3e-4, 1e-3, 0.0034, 0.01027, 0.0308172, 0.1098676, 0.2125289)))
 saveRDS(class_rpart_2, "rpart_class_no_NA.rds")
 
 
@@ -174,10 +174,10 @@ saveRDS(class_svm_2, "svm_class_no_NA.rds")
 
 
 
-class_cubist_2 <- train(SALE.PRICE ~ ., data = df.train, trControl = ctrl_3, 
+class_cubist_2 <- train(SALE.PRICE ~ ., data = df.train.no.NA, trControl = ctrl_3, 
                    method = "cubist",preProcess = c("center","scale"), 
                    na.action = na.pass)
-saveRDS(class_cubist_2, "c50_class_no_NA.rds")
+saveRDS(class_cubist_2, "c50_class_no_NA.rds")  ## Takes time
 
 
 ```
@@ -186,23 +186,24 @@ saveRDS(class_cubist_2, "c50_class_no_NA.rds")
 
 ### Predict:
 ```{r}
-(class_gbm_1 <- readRDS("gbm_class.rds"))
-(class_gbm_2 <- readRDS("gbm_class_no_NA.rds"))
+(class_gbm_1 <- readRDS("gbm_class.rds"))  # 0.37893
+(class_gbm_2 <- readRDS("gbm_class_no_NA.rds")) # 0.3857594
 (class_rpart_1 <- readRDS("rpart_class.rds"))  ##  not very good, reduce cp and see
-(class_rpart_2 <- readRDS("rpart_class_no_NA.rds")) ##  not very good, reduce cp and see
-(class_ranger_2 <- readRDS("ranger_class_no_NA.rds"))  ## not bad
+(class_rpart_2 <- readRDS("rpart_class_no_NA.rds")) ##  not very good, reduce cp and see  0.4611720
+(class_ranger_2 <- readRDS("ranger_class_no_NA.rds"))  ## not bad # 0.3857598
 (class_pls_2 <- readRDS("pls_class_no_NA.rds")) # clearly bad
 (class_pcr_2 <- readRDS("pcr_class_no_NA.rds")) # clearly bad
-(class_earth_2 <- readRDS("earth_class_no_NA.rds")) # not bad, increase nprune
+(class_earth_2 <- readRDS("earth_class_no_NA.rds")) # not bad, increase nprune 
+# 0.3966643
 (class_cubist_2 <- readRDS("cubist_class_no_NA.rds"))
 
-(class_svm_1 <- readRDS("svm_class.rds"))
+(class_svm_1 <- readRDS("svm_class.rds")) # 0.4654915
 
 
 setwd("..")
 
 pred<- predict(class_gbm_1, df.test) #df.test is the manipulated df of test 
-pred<- exp(pred)
+pred<- exp(pred)-1
 solution <- data.frame("INDEX"=id,"PRICE"= pred)
 write.csv(solution, 
           paste0("./submission/solution", 

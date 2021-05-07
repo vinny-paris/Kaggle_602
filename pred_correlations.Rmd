@@ -1,0 +1,29 @@
+---
+title: "sum_correlation"
+author: "Vinny Paris"
+date: "5/2/2021"
+output: html_document
+---
+
+```{r}
+library(reshape2)
+library(ggplot2)
+
+cv_val <- read.csv('submission_scores')
+
+
+
+my_path <- as.list(list.files("./submission/"))
+my_path <- lapply(my_path, function(x) paste('./submission/', x, sep = ""))
+my_data_list <- lapply(my_path, read.csv)
+my_data_list <- lapply(my_data_list, function(x) x[order(x$INDEX),])
+my_data_list <- lapply(my_data_list, function(x) x[,-1])
+
+my_data <- do.call(cbind, my_data_list)
+my_data <- as.matrix(my_data)
+
+my_cor <- cor(my_data)
+my_cor_melt <- as.data.frame(melt(my_cor))
+ggplot(my_cor_melt, aes(Var1, Var2, fill = value)) + geom_tile() + ggtitle('Correlation of Predictions', sub = 'Presented in same order as the cv values below')
+cv_val
+```
